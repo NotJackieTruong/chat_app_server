@@ -1,9 +1,11 @@
 // create unique id for each user
 const uuidv4 = require('bson-objectid')
+const mongoose = require('mongoose')
+
 // create user
 const createUser = ({name= "", socketId=null} = {})=>(
   {
-    id: uuidv4(),
+    id: mongoose.Types.ObjectId(),
     name,
     socketId
   }
@@ -11,7 +13,7 @@ const createUser = ({name= "", socketId=null} = {})=>(
 
 // create message
 const createMessage = ({message="", sender=""} = {})=>({
-  id: uuidv4(),
+  id: mongoose.Types.ObjectId(),
   time: getTime(new Date(Date.now())),
   message,
   sender
@@ -24,7 +26,7 @@ const getTime = (date)=>{
 
 // create chat
 const createChat = ({messages=[], name= "Community", users=[], isCommunity = false}={})=>({
-  id: uuidv4(),
+  id: mongoose.Types.ObjectId(),
   messages,
   name: isCommunity? "Community": createChatNameFromUser(users),
   users,

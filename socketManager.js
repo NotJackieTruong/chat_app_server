@@ -1,5 +1,9 @@
 const io = require('./index').io
 const mongoose = require('mongoose')
+const User = require('./models/user')
+const Chat = require('./models/chat')
+const Message = require('./models/message')
+
 
 // import socket events
 const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT } = require('./Events') // import namespaces
@@ -95,17 +99,49 @@ module.exports = function (socket) {
             socket.to(user.socketId).emit(PRIVATE_CHAT, newChat)
           })
         socket.emit(PRIVATE_CHAT, newChat)
+
+        
+        // var chat = new Chat({
+        //   _id: newChat.id,
+        //   name: newChat.name,
+        //   messages: newChat.messages,
+        //   users: groupOfUsers.filter(user => user in connectedUsers).map(user => connectedUsers[user]).map(user=>Object.assign({}, user.id)),
+        //   isCommunity: newChat.isCommunity
+        // })
+        console.log('chat: ', groupOfUsers.filter(user => user in connectedUsers).map(user => connectedUsers[user]).map(user=> {return connectedUsers[user]}))
+        // chat.save(err=>{
+        //   if(err) throw err;
+        //   console.log(chat, 'saved successfully!')
+        // })
       }
 
     } else {
       const newChat = createChat({ name: `${sender},${groupOfUsers.map(user => ' ' + user)}`, users: groupOfUsers })
+      
       groupOfUsers.filter(user => user in connectedUsers) // take all users that are in activeChat.users array out of connectedUsers object
         .map(user => connectedUsers[user]) // get user object in connectedUsers
         .map(user => {
           socket.to(user.socketId).emit(PRIVATE_CHAT, newChat)
         })
       socket.emit(PRIVATE_CHAT, newChat)
+
+      // save chat to db
+
+      var chat = new Chat({
+        _id: newChat.id,
+        name: newChat.name,
+        messages: newChat.messages,
+        users: newChat.users,
+        isCommunity: newChat.isCommunity
+      })
+      console.log('chat: ', chat)
+      chat.save(err=>{
+        if(err) throw err;
+        console.log(chat, 'saved successfully!')
+      })
     }
+
+    
   })
 
   socket.on(ADD_USER_TO_CHAT, ({ receivers, activeChat, chats }) => {

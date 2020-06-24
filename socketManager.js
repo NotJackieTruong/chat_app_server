@@ -8,6 +8,7 @@ const Message = require('./models/message')
 // import socket events
 const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT } = require('./Events') // import namespaces
 const { createMessage, createChat, createUser } = require('./Factories')
+const user = require('./models/user')
 
 let connectedUsers = {} // list of connected users
 let communityChat = createChat({ isCommunity: true })
@@ -101,18 +102,17 @@ module.exports = function (socket) {
         socket.emit(PRIVATE_CHAT, newChat)
 
         
-        // var chat = new Chat({
-        //   _id: newChat.id,
-        //   name: newChat.name,
-        //   messages: newChat.messages,
-        //   users: groupOfUsers.filter(user => user in connectedUsers).map(user => connectedUsers[user]).map(user=>Object.assign({}, user.id)),
-        //   isCommunity: newChat.isCommunity
-        // })
-        console.log('chat: ', groupOfUsers.filter(user => user in connectedUsers).map(user => connectedUsers[user]).map(user=> {return connectedUsers[user]}))
-        // chat.save(err=>{
-        //   if(err) throw err;
-        //   console.log(chat, 'saved successfully!')
-        // })
+        let chat = new Chat({
+          _id: mongoose.Types.ObjectId(newChat.id),
+          name: newChat.name,
+          messages: newChat.messages,
+          isCommunity: newChat.isCommunity
+        })
+        groupOfUsers.filter(user => user in connectedUsers).map(user => connectedUsers[user]).map(user=> chat.users.push(mongoose.Types.ObjectId(connectedUsers[user])))
+        chat.save(err=>{
+          if(err) throw err;
+          console.log(chat, ' saved successfully!')
+        })
       }
 
     } else {
@@ -127,17 +127,16 @@ module.exports = function (socket) {
 
       // save chat to db
 
-      var chat = new Chat({
-        _id: newChat.id,
+      let chat = new Chat({
+        _id: mongoose.Types.ObjectId(newChat.id),
         name: newChat.name,
         messages: newChat.messages,
-        users: newChat.users,
         isCommunity: newChat.isCommunity
       })
-      console.log('chat: ', chat)
+      groupOfUsers.filter(user => user in connectedUsers).map(user => connectedUsers[user]).map(user=> chat.users.push(mongoose.Types.ObjectId(connectedUsers[user])))
       chat.save(err=>{
         if(err) throw err;
-        console.log(chat, 'saved successfully!')
+        console.log(chat, ' saved successfully!')
       })
     }
 
@@ -186,8 +185,11 @@ function isUser(userList, username) {
 // function to send a message event
 function sendMessageToChat(sender) {
   return (chatId, message) => {
-    io.emit(`${MESSAGE_RECEIVED}-${chatId}`, createMessage({ message, sender }))
+    var newMessage = createMessage({message, sender})
+    io.emit(`${MESSAGE_RECEIVED}-${chatId}`, newMessage)
+
   }
+  
 }
 
 // function to send a typing event

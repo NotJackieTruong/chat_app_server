@@ -162,75 +162,29 @@ module.exports = function (socket) {
         })
       }
 
-    })
-    // if there are chats at the moment
-    // if (chats) {
-    //   // check if there exists the chat
-    //   if (!checkIsCreated(groupOfUsers, chats)) {
-    //     const newChat = createChat({ name: `${sender},${groupOfUsers.map(user => ' ' + user)}`, users: groupOfUsers })
-    //     const chat = new Chat({
-    //       _id: mongoose.Types.ObjectId(newChat.id),
-    //       name: newChat.name,
-    //       messages: newChat.messages,
-    //       isCommunity: newChat.isCommunity
-    //     })
-    //     groupOfUsers.filter(user => user in connectedUsers) // take all users that are in activeChat.users array out of connectedUsers object
-    //       .map(user => connectedUsers[user]) // get user object in connectedUsers
-    //       .map(user => {
-    //         socket.to(user.socketId).emit(PRIVATE_CHAT, newChat)
-    //         chat.users.push(mongoose.Types.ObjectId(user.id))
-    //       })
-    //     socket.emit(PRIVATE_CHAT, newChat)
-    //     chat.save(err => {
-    //       if (err) throw err;
-    //       console.log('Saved successfully!')
-    //     })
-    //   }
-
-    // } else {
-    //   const newChat = createChat({ name: `${sender},${groupOfUsers.map(user => ' ' + user)}`, users: groupOfUsers })
-    //   let chat = new Chat({
-    //     _id: mongoose.Types.ObjectId(newChat.id),
-    //     name: newChat.name,
-    //     messages: newChat.messages,
-    //     isCommunity: newChat.isCommunity
-    //   })
-    //   groupOfUsers.filter(user => user in connectedUsers) // take all users that are in activeChat.users array out of connectedUsers object
-    //     .map(user => connectedUsers[user]) // get user object in connectedUsers
-    //     .map(user => {
-    //       socket.to(user.socketId).emit(PRIVATE_CHAT, newChat)
-    //       chat.users.push(mongoose.Types.ObjectId(user.id))
-
-    //     })
-    //   socket.emit(PRIVATE_CHAT, newChat)
-
-    //   // save chat to db
-
-
-    //   chat.save(err => {
-    //     if (err) throw err;
-    //     console.log('Saved successfully!')
-    //   })
-    // }
-
+    })  
 
   })
 
   socket.on(ADD_USER_TO_CHAT, ({ receivers, activeChat, chats }) => {
     // const receiverSocket = receiver.socketId
-    const groupOfUsers = activeChat.users.concat(receivers)
+    const groupOfUserIds = activeChat.users.concat(receivers.map(receiver => receiver._id))
 
     activeChat.users.filter(user => user in connectedUsers) // take all users that are in activeChat.users array out of connectedUsers object
       .map(user => connectedUsers[user]) // get user object in connectedUsers
       .map(user => {
-        socket.to(user.socketId).emit(NEW_CHAT_USER, { chatId: activeChat.id, newUser: receivers })
+        socket.to(user.socketId).emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
       })
-    socket.emit(NEW_CHAT_USER, { chatId: activeChat.id, newUser: receivers })
+    socket.emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
     receivers.filter(user => user in connectedUsers)
       .map(user => connectedUsers[user])
       .map(user => {
         socket.to(user.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { name: activeChat.users.concat(receivers).join(", "), users: activeChat.users.concat(receivers) }))
       })
+    receivers.map(receiver => {
+      socket.to(receiver.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { name: activeChat.users.concat(receivers.map(receiver => receiver.name)).join(", "), users: activeChat.users.concat(receivers.map(receiver => receiver._id)) }))
+
+    })
   })
 
 }

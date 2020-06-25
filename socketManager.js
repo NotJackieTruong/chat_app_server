@@ -30,11 +30,19 @@ module.exports = function (socket) {
 
   // receive verify event to verify user name
   socket.on(VERIFY_USER, (nickname, callback) => {
-    if (isUser(connectedUsers, nickname)) {
-      callback({ isUser: true, user: null })
-    } else {
-      callback({ isUser: false, user: createUser({ name: nickname, socketId: socket.id }) })
-    }
+    User.findOne({ name: nickname }, (err, result) => {
+      if (err) throw err
+      if (result) {
+        if (isUser(connectedUsers, result.name)) {
+          callback({ isUser: true, user: null })
+        } else {
+          callback({ isUser: false, user: Object.assign({}, { id: result._id, name: result.name }, { socketId: socket.id }) })
+        }
+      } else {
+        console.log('Cannot find user')
+      }
+
+    })
 
   })
 
@@ -49,6 +57,25 @@ module.exports = function (socket) {
 
     io.emit(USER_CONNECTED, connectedUsers)
     console.log('Connected user list: ', connectedUsers)
+
+    Chat.find({}, (err, results) => {
+      if (err) throw err;
+
+      if (results) {
+        results.map(result => {
+          result.users.filter(user => user in connectedUsers) // take all users that are in activeChat.users array out of connectedUsers object
+            .map(user => connectedUsers[user]) // get user object in connectedUsers
+            .map(user => {
+              socket.to(user.socketId).emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
+              // callback(Object.assign({}, result, {typingUsers: [], isCommunity: false}))
+
+            })
+          socket.emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
+        })
+      }
+
+    })
+
   })
 
   // receive user disconnected event
@@ -64,7 +91,7 @@ module.exports = function (socket) {
 
   // receive user logout event
   socket.on(LOGOUT, () => {
-    console.log(socket.user.name,'just logged out!')
+    console.log(socket.user.name, 'just logged out!')
     connectedUsers = removeUser(connectedUsers, socket.user.name)
     io.emit(USER_DISCONNECTED, connectedUsers)
     console.log('user connected list after loggin out: ', connectedUsers)
@@ -73,6 +100,7 @@ module.exports = function (socket) {
   // receive community_chat (default chat) event
   socket.on(COMMUNITY_CHAT, (callback) => {
     callback(communityChat)
+
   })
 
   // receive message event
@@ -88,59 +116,104 @@ module.exports = function (socket) {
   // receive private chat event
   socket.on(PRIVATE_CHAT, ({ sender, receivers, chats }) => {
     const groupOfUsers = [...receivers, sender]
-
-    // if there are chats at the moment
-    if (chats) {
-      // check if there exists the chat
-      if (!checkIsCreated(groupOfUsers, chats)) {
-        const newChat = createChat({ name: `${sender},${groupOfUsers.map(user => ' ' + user)}`, users: groupOfUsers })
-        groupOfUsers.filter(user => user in connectedUsers) // take all users that are in activeChat.users array out of connectedUsers object
-          .map(user => connectedUsers[user]) // get user object in connectedUsers
-          .map(user => {
+    const groupOfUserIds = [...receivers, sender].map(user => user.id)
+    Chat.find({}, (err, results) => {
+      if (err) throw err;
+      if (results) {
+        if (!checkIsCreated(groupOfUserIds, results)) {
+          console.log('chat is not in db')
+          const newChat = createChat({ name: `${sender.name},${receivers.map(receiver => ' ' + receiver.name)}`, users: [...receivers, sender].map(user => user.name) })
+          const chat = new Chat({
+            _id: mongoose.Types.ObjectId(newChat._id),
+            name: newChat.name,
+            messages: newChat.messages,
+            isCommunity: newChat.isCommunity
+          })
+          groupOfUsers.map(user => {
+            chat.users.push(mongoose.Types.ObjectId(user.id))
             socket.to(user.socketId).emit(PRIVATE_CHAT, newChat)
           })
-        socket.emit(PRIVATE_CHAT, newChat)
+          socket.emit(PRIVATE_CHAT, newChat)
 
-        
-        let chat = new Chat({
-          _id: mongoose.Types.ObjectId(newChat.id),
+          chat.save(err => {
+            if (err) throw err;
+            console.log('Saved successfully!')
+          })
+        } else {
+          console.log('chat is already in db')
+        }
+      } else {
+        const newChat = createChat({ name: `${sender.name},${receivers.map(receiver => ' ' + receiver.name)}`, users: [...receivers, sender].map(user => user.name) })
+        const chat = new Chat({
+          _id: mongoose.Types.ObjectId(newChat._id),
           name: newChat.name,
           messages: newChat.messages,
           isCommunity: newChat.isCommunity
         })
-        groupOfUsers.filter(user => user in connectedUsers).map(user => connectedUsers[user]).map(user=> chat.users.push(mongoose.Types.ObjectId(connectedUsers[user])))
-        chat.save(err=>{
-          if(err) throw err;
-          console.log(chat, ' saved successfully!')
+        groupOfUsers.map(user => {
+          chat.users.push(mongoose.Types.ObjectId(user.id))
+          socket.to(user.socketId).emit(PRIVATE_CHAT, newChat)
+        })
+        socket.emit(PRIVATE_CHAT, newChat)
+
+        chat.save(err => {
+          if (err) throw err;
+          console.log('Saved successfully!')
         })
       }
 
-    } else {
-      const newChat = createChat({ name: `${sender},${groupOfUsers.map(user => ' ' + user)}`, users: groupOfUsers })
-      
-      groupOfUsers.filter(user => user in connectedUsers) // take all users that are in activeChat.users array out of connectedUsers object
-        .map(user => connectedUsers[user]) // get user object in connectedUsers
-        .map(user => {
-          socket.to(user.socketId).emit(PRIVATE_CHAT, newChat)
-        })
-      socket.emit(PRIVATE_CHAT, newChat)
+    })
+    // if there are chats at the moment
+    // if (chats) {
+    //   // check if there exists the chat
+    //   if (!checkIsCreated(groupOfUsers, chats)) {
+    //     const newChat = createChat({ name: `${sender},${groupOfUsers.map(user => ' ' + user)}`, users: groupOfUsers })
+    //     const chat = new Chat({
+    //       _id: mongoose.Types.ObjectId(newChat.id),
+    //       name: newChat.name,
+    //       messages: newChat.messages,
+    //       isCommunity: newChat.isCommunity
+    //     })
+    //     groupOfUsers.filter(user => user in connectedUsers) // take all users that are in activeChat.users array out of connectedUsers object
+    //       .map(user => connectedUsers[user]) // get user object in connectedUsers
+    //       .map(user => {
+    //         socket.to(user.socketId).emit(PRIVATE_CHAT, newChat)
+    //         chat.users.push(mongoose.Types.ObjectId(user.id))
+    //       })
+    //     socket.emit(PRIVATE_CHAT, newChat)
+    //     chat.save(err => {
+    //       if (err) throw err;
+    //       console.log('Saved successfully!')
+    //     })
+    //   }
 
-      // save chat to db
+    // } else {
+    //   const newChat = createChat({ name: `${sender},${groupOfUsers.map(user => ' ' + user)}`, users: groupOfUsers })
+    //   let chat = new Chat({
+    //     _id: mongoose.Types.ObjectId(newChat.id),
+    //     name: newChat.name,
+    //     messages: newChat.messages,
+    //     isCommunity: newChat.isCommunity
+    //   })
+    //   groupOfUsers.filter(user => user in connectedUsers) // take all users that are in activeChat.users array out of connectedUsers object
+    //     .map(user => connectedUsers[user]) // get user object in connectedUsers
+    //     .map(user => {
+    //       socket.to(user.socketId).emit(PRIVATE_CHAT, newChat)
+    //       chat.users.push(mongoose.Types.ObjectId(user.id))
 
-      let chat = new Chat({
-        _id: mongoose.Types.ObjectId(newChat.id),
-        name: newChat.name,
-        messages: newChat.messages,
-        isCommunity: newChat.isCommunity
-      })
-      groupOfUsers.filter(user => user in connectedUsers).map(user => connectedUsers[user]).map(user=> chat.users.push(mongoose.Types.ObjectId(connectedUsers[user])))
-      chat.save(err=>{
-        if(err) throw err;
-        console.log(chat, ' saved successfully!')
-      })
-    }
+    //     })
+    //   socket.emit(PRIVATE_CHAT, newChat)
 
-    
+    //   // save chat to db
+
+
+    //   chat.save(err => {
+    //     if (err) throw err;
+    //     console.log('Saved successfully!')
+    //   })
+    // }
+
+
   })
 
   socket.on(ADD_USER_TO_CHAT, ({ receivers, activeChat, chats }) => {
@@ -161,7 +234,6 @@ module.exports = function (socket) {
   })
 
 }
-
 
 // function to add user
 function addUser(userList, user) {
@@ -185,11 +257,11 @@ function isUser(userList, username) {
 // function to send a message event
 function sendMessageToChat(sender) {
   return (chatId, message) => {
-    var newMessage = createMessage({message, sender})
+    var newMessage = createMessage({ message, sender })
     io.emit(`${MESSAGE_RECEIVED}-${chatId}`, newMessage)
 
   }
-  
+
 }
 
 // function to send a typing event

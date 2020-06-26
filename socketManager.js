@@ -36,7 +36,7 @@ module.exports = function (socket) {
         if (isUser(connectedUsers, result.name)) {
           callback({ isUser: true, user: null })
         } else {
-          callback({ isUser: false, user: Object.assign({}, { id: result._id, name: result.name }, { socketId: socket.id }) })
+          callback({ isUser: false, user: Object.assign({}, { _id: result._id, name: result.name }, { socketId: socket.id }) })
         }
       } else {
         console.log('Cannot find user')
@@ -63,14 +63,31 @@ module.exports = function (socket) {
 
       if (results) {
         results.map(result => {
-          result.users.filter(user => user in connectedUsers) // take all users that are in activeChat.users array out of connectedUsers object
-            .map(user => connectedUsers[user]) // get user object in connectedUsers
-            .map(user => {
-              socket.to(user.socketId).emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
-              // callback(Object.assign({}, result, {typingUsers: [], isCommunity: false}))
+          // result.users.filter(user => user in connectedUsers) // take all users that are in activeChat.users array out of connectedUsers object
+          //   .map(user => connectedUsers[user]) // get user object in connectedUsers
+          //   .map(user => {
+          //     socket.to(user.socketId).emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
+          //     // callback(Object.assign({}, result, {typingUsers: [], isCommunity: false}))
 
-            })
-          socket.emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
+          //   })
+          // socket.emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
+          result.users.map(userId=> {
+            for(let key in connectedUsers){
+              if(JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)){
+                return connectedUsers[key]
+              }
+            
+            }
+          }).map(user=>{
+            if(user){
+              // socket.to(user.socketId).emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
+              if(user._id === socket.user._id){
+                socket.emit(PRIVATE_CHAT,Object.assign({}, result._doc, { typingUsers: [] }))
+              }
+            }
+            
+          })
+         
         })
       }
 
@@ -116,7 +133,7 @@ module.exports = function (socket) {
   // receive private chat event
   socket.on(PRIVATE_CHAT, ({ sender, receivers, chats }) => {
     const groupOfUsers = [...receivers, sender]
-    const groupOfUserIds = [...receivers, sender].map(user => user.id)
+    const groupOfUserIds = [...receivers, sender].map(user => user._id)
     Chat.find({}, (err, results) => {
       if (err) throw err;
       if (results) {
@@ -130,7 +147,7 @@ module.exports = function (socket) {
             isCommunity: newChat.isCommunity
           })
           groupOfUsers.map(user => {
-            chat.users.push(mongoose.Types.ObjectId(user.id))
+            chat.users.push(mongoose.Types.ObjectId(user._id))
             socket.to(user.socketId).emit(PRIVATE_CHAT, newChat)
           })
           socket.emit(PRIVATE_CHAT, newChat)
@@ -151,7 +168,7 @@ module.exports = function (socket) {
           isCommunity: newChat.isCommunity
         })
         groupOfUsers.map(user => {
-          chat.users.push(mongoose.Types.ObjectId(user.id))
+          chat.users.push(mongoose.Types.ObjectId(user._id))
           socket.to(user.socketId).emit(PRIVATE_CHAT, newChat)
         })
         socket.emit(PRIVATE_CHAT, newChat)
@@ -169,21 +186,44 @@ module.exports = function (socket) {
   socket.on(ADD_USER_TO_CHAT, ({ receivers, activeChat, chats }) => {
     // const receiverSocket = receiver.socketId
     const groupOfUserIds = activeChat.users.concat(receivers.map(receiver => receiver._id))
-
-    activeChat.users.filter(user => user in connectedUsers) // take all users that are in activeChat.users array out of connectedUsers object
-      .map(user => connectedUsers[user]) // get user object in connectedUsers
-      .map(user => {
+    const groupOfUserNames = activeChat.name.concat(receivers.map(receiver => ", "+ receiver.name))
+    // console.log('receivers: ', receivers)
+    activeChat.users.map(userId=> {
+      for(let key in connectedUsers){
+        if(JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)){
+          return connectedUsers[key]
+        }
+      }
+    }).map(user => {
+      if(user){
         socket.to(user.socketId).emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
-      })
+      }
+    })
     socket.emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
-    receivers.filter(user => user in connectedUsers)
-      .map(user => connectedUsers[user])
-      .map(user => {
-        socket.to(user.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { name: activeChat.users.concat(receivers).join(", "), users: activeChat.users.concat(receivers) }))
-      })
-    receivers.map(receiver => {
-      socket.to(receiver.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { name: activeChat.users.concat(receivers.map(receiver => receiver.name)).join(", "), users: activeChat.users.concat(receivers.map(receiver => receiver._id)) }))
+    receivers.map(receiver =>{
+      socket.to(receiver.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { name: groupOfUserNames, users: groupOfUserIds }))
+    })
 
+    
+    // activeChat.users.filter(user => user in connectedUsers) // take all users that are in activeChat.users array out of connectedUsers object
+    //   .map(user => connectedUsers[user]) // get user object in connectedUsers
+    //   .map(user => {
+       
+    //     socket.to(user.socketId).emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
+    //   })
+    // socket.emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
+    // // receivers.filter(user => user in connectedUsers)
+    // //   .map(user => connectedUsers[user])
+    // //   .map(user => {
+    // //     socket.to(user.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { name: activeChat.users.concat(receivers).join(", "), users: activeChat.users.concat(receivers) }))
+    // //   })
+    // receivers.map(receiver => {
+    //   socket.to(receiver.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { name: activeChat.name.concat(receivers.map(receiver => ", "+ receiver.name)), users: activeChat.users.concat(receivers.map(receiver => receiver._id)) }))
+    // })
+
+    Chat.findOneAndUpdate({_id: mongoose.Types.ObjectId(activeChat._id)}, {users: groupOfUserIds, name: groupOfUserNames}, (err, result)=>{
+      if(err) throw err
+      console.log('Update chat successfully!')
     })
   })
 

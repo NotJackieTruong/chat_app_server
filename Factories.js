@@ -11,7 +11,7 @@ const createUser = ({name= "", socketId=null} = {})=>(
 )
 
 // create message
-const createMessage = ({message="", sender=""} = {})=>({
+const createMessage = ({message="", sender=null} = {})=>({
   _id: mongoose.Types.ObjectId(),
   time: getTime(new Date(Date.now())),
   message,

@@ -6,7 +6,7 @@ const Message = require('./models/message')
 
 
 // import socket events
-const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT } = require('./Events') // import namespaces
+const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT } = require('./Events') // import namespaces
 const { createMessage, createChat, createUser } = require('./Factories')
 const user = require('./models/user')
 
@@ -155,6 +155,7 @@ module.exports = function (socket) {
           })
           // send chat to the sender
           socket.emit(PRIVATE_CHAT, newChat)
+          socket.emit(ACTIVE_CHAT, newChat)
 
           // save chat to db
           chat.save(err => {
@@ -202,38 +203,24 @@ module.exports = function (socket) {
       }
     }).map(user => {
       if(user){
+        // send new users to all users who are in user.socketId channel
         socket.to(user.socketId).emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
       }
     })
 
+    // send new users to the sender on NEW_CHAT_USER namespace
     socket.emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
 
+    // send an active chat to new users
     receivers.map(receiver =>{
       socket.to(receiver.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { name: groupOfUserNames, users: groupOfUserIds }))
     })
 
+    // save to db
     Chat.findOneAndUpdate({_id: mongoose.Types.ObjectId(activeChat._id)}, {users: groupOfUserIds, name: groupOfUserNames}, (err, result)=>{
       if(err) throw err
       console.log('Update chat successfully!')
     })
-
-    // activeChat.users.filter(user => user in connectedUsers) // take all users that are in activeChat.users array out of connectedUsers object
-    //   .map(user => connectedUsers[user]) // get user object in connectedUsers
-    //   .map(user => {
-
-    //     socket.to(user.socketId).emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
-    //   })
-    // socket.emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
-    // // receivers.filter(user => user in connectedUsers)
-    // //   .map(user => connectedUsers[user])
-    // //   .map(user => {
-    // //     socket.to(user.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { name: activeChat.users.concat(receivers).join(", "), users: activeChat.users.concat(receivers) }))
-    // //   })
-    // receivers.map(receiver => {
-    //   socket.to(receiver.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { name: activeChat.name.concat(receivers.map(receiver => ", "+ receiver.name)), users: activeChat.users.concat(receivers.map(receiver => receiver._id)) }))
-    // })
-
-
   })
 
 }
@@ -260,8 +247,7 @@ function isUser(userList, username) {
 // function to send a message event
 function sendMessageToChat(sender) {
   return (chatId, message) => {
-    var newMessage = createMessage({ message, sender })
-    io.emit(`${MESSAGE_RECEIVED}-${chatId}`, newMessage)
+    io.emit(`${MESSAGE_RECEIVED}-${chatId}`, createMessage({ message, sender }))
 
   }
 

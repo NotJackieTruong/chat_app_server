@@ -1,5 +1,4 @@
 // create unique id for each user
-const uuidv4 = require('bson-objectid')
 const mongoose = require('mongoose')
 
 // create user
@@ -28,19 +27,19 @@ const getTime = (date)=>{
 const createChat = ({messages=[], name= "Community", users=[], isCommunity = false}={})=>({
   _id: mongoose.Types.ObjectId(),
   messages,
-  name: isCommunity? "Community": createChatNameFromUser(users),
+  name: isCommunity? "Community": name,
   users,
   typingUsers: [],
   isCommunity
 })
 
-const createChatNameFromUser = (users, excludeUser = "")=>{
-  return users.filter(u => u !== excludeUser).join(', ') || "Empty users"
-}
+// const createChatNameFromUser = (users, excludeUser = "")=>{
+//   return users.filter(u => u !== excludeUser).join(', ') || "Empty users"
+// }
 
 module.exports ={
   createMessage,
   createChat,
   createUser,
-  createChatNameFromUser
+  // createChatNameFromUser
 }

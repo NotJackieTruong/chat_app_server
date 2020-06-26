@@ -71,23 +71,23 @@ module.exports = function (socket) {
 
           //   })
           // socket.emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
-          result.users.map(userId=> {
-            for(let key in connectedUsers){
-              if(JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)){
+          result.users.map(userId => {
+            for (let key in connectedUsers) {
+              if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
                 return connectedUsers[key]
               }
-            
+
             }
-          }).map(user=>{
-            if(user){
+          }).map(user => {
+            if (user) {
               // socket.to(user.socketId).emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
-              if(user._id === socket.user._id){
-                socket.emit(PRIVATE_CHAT,Object.assign({}, result._doc, { typingUsers: [] }))
+              if (user._id === socket.user._id) {
+                socket.emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
               }
             }
-            
+
           })
-         
+
         })
       }
 
@@ -133,13 +133,15 @@ module.exports = function (socket) {
   // receive private chat event
   socket.on(PRIVATE_CHAT, ({ sender, receivers, chats }) => {
     const groupOfUsers = [...receivers, sender]
-    const groupOfUserIds = [...receivers, sender].map(user => user._id)
+    const groupOfUserIds = groupOfUsers.map(user => user._id)
+    const groupOfUserNames = groupOfUsers.map(user => user.name).join(', ')
+
     Chat.find({}, (err, results) => {
       if (err) throw err;
       if (results) {
         if (!checkIsCreated(groupOfUserIds, results)) {
           console.log('chat is not in db')
-          const newChat = createChat({ name: `${sender.name},${receivers.map(receiver => ' ' + receiver.name)}`, users: [...receivers, sender].map(user => user.name) })
+          const newChat = createChat({ name: groupOfUserNames, users: groupOfUserIds })
           const chat = new Chat({
             _id: mongoose.Types.ObjectId(newChat._id),
             name: newChat.name,
@@ -148,10 +150,13 @@ module.exports = function (socket) {
           })
           groupOfUsers.map(user => {
             chat.users.push(mongoose.Types.ObjectId(user._id))
+            // send chat to all users that is on user.socketId namespaces
             socket.to(user.socketId).emit(PRIVATE_CHAT, newChat)
           })
+          // send chat to the sender
           socket.emit(PRIVATE_CHAT, newChat)
 
+          // save chat to db
           chat.save(err => {
             if (err) throw err;
             console.log('Saved successfully!')
@@ -160,7 +165,7 @@ module.exports = function (socket) {
           console.log('chat is already in db')
         }
       } else {
-        const newChat = createChat({ name: `${sender.name},${receivers.map(receiver => ' ' + receiver.name)}`, users: [...receivers, sender].map(user => user.name) })
+        const newChat = createChat({ name: groupOfUserNames, users: groupOfUserIds })
         const chat = new Chat({
           _id: mongoose.Types.ObjectId(newChat._id),
           name: newChat.name,
@@ -171,6 +176,7 @@ module.exports = function (socket) {
           chat.users.push(mongoose.Types.ObjectId(user._id))
           socket.to(user.socketId).emit(PRIVATE_CHAT, newChat)
         })
+        console.log('newChat: ', newChat)
         socket.emit(PRIVATE_CHAT, newChat)
 
         chat.save(err => {
@@ -179,15 +185,15 @@ module.exports = function (socket) {
         })
       }
 
-    })  
+    })
 
   })
 
   socket.on(ADD_USER_TO_CHAT, ({ receivers, activeChat, chats }) => {
     // const receiverSocket = receiver.socketId
     const groupOfUserIds = activeChat.users.concat(receivers.map(receiver => receiver._id))
-    const groupOfUserNames = activeChat.name.concat(receivers.map(receiver => ", "+ receiver.name))
-    // console.log('receivers: ', receivers)
+    const groupOfUserNames = activeChat.name.concat(receivers.map(receiver => ", " + receiver.name))
+
     activeChat.users.map(userId=> {
       for(let key in connectedUsers){
         if(JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)){
@@ -199,16 +205,22 @@ module.exports = function (socket) {
         socket.to(user.socketId).emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
       }
     })
+
     socket.emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
+
     receivers.map(receiver =>{
       socket.to(receiver.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { name: groupOfUserNames, users: groupOfUserIds }))
     })
 
-    
+    Chat.findOneAndUpdate({_id: mongoose.Types.ObjectId(activeChat._id)}, {users: groupOfUserIds, name: groupOfUserNames}, (err, result)=>{
+      if(err) throw err
+      console.log('Update chat successfully!')
+    })
+
     // activeChat.users.filter(user => user in connectedUsers) // take all users that are in activeChat.users array out of connectedUsers object
     //   .map(user => connectedUsers[user]) // get user object in connectedUsers
     //   .map(user => {
-       
+
     //     socket.to(user.socketId).emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
     //   })
     // socket.emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
@@ -221,10 +233,7 @@ module.exports = function (socket) {
     //   socket.to(receiver.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { name: activeChat.name.concat(receivers.map(receiver => ", "+ receiver.name)), users: activeChat.users.concat(receivers.map(receiver => receiver._id)) }))
     // })
 
-    Chat.findOneAndUpdate({_id: mongoose.Types.ObjectId(activeChat._id)}, {users: groupOfUserIds, name: groupOfUserNames}, (err, result)=>{
-      if(err) throw err
-      console.log('Update chat successfully!')
-    })
+
   })
 
 }

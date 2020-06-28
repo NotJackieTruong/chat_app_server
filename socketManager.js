@@ -52,8 +52,8 @@ module.exports = function (socket) {
     connectedUsers = addUser(connectedUsers, user)
     socket.user = user
 
-    sendMessageToChatFromUser = sendMessageToChat(user.name)
-    sendTypingFromUser = sendTypingToChat(user.name)
+    sendMessageToChatFromUser = sendMessageToChat(user)
+    sendTypingFromUser = sendTypingToChat(user)
 
     io.emit(USER_CONNECTED, connectedUsers)
     console.log('Connected user list: ', connectedUsers)
@@ -82,7 +82,7 @@ module.exports = function (socket) {
             if (user) {
               // socket.to(user.socketId).emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
               if (user._id === socket.user._id) {
-                socket.emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
+                socket.emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [], hasNewMessages: false }))
               }
             }
 

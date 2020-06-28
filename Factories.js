@@ -24,13 +24,14 @@ const getTime = (date)=>{
 }
 
 // create chat
-const createChat = ({messages=[], name= "Community", users=[], isCommunity = false}={})=>({
+const createChat = ({messages=[], name= "Community", users=[], isCommunity = false, hasNewMessages=false}={})=>({
   _id: mongoose.Types.ObjectId(),
   messages,
   name: isCommunity? "Community": name,
   users,
   typingUsers: [],
-  isCommunity
+  isCommunity,
+  hasNewMessages
 })
 
 // const createChatNameFromUser = (users, excludeUser = "")=>{

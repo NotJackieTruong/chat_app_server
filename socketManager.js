@@ -6,7 +6,7 @@ const Message = require('./models/message')
 
 
 // import socket events
-const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT } = require('./Events') // import namespaces
+const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP, LOG_IN } = require('./Events') // import namespaces
 const { createMessage, createChat, createUser } = require('./Factories')
 const user = require('./models/user')
 
@@ -29,26 +29,50 @@ module.exports = function (socket) {
   let sendTypingFromUser;
 
   // receive verify event to verify user name
-  socket.on(VERIFY_USER, (nickname, callback) => {
+  // check if user is already in db
+  socket.on(SIGN_UP, (nickname, callback) => {
     User.findOne({ name: nickname }, (err, result) => {
       if (err) throw err
       if (result) {
-        if (isUser(connectedUsers, result.name)) {
-          callback({ isUser: true, user: null })
-        } else {
-          callback({ isUser: false, user: Object.assign({}, { _id: result._id, name: result.name }, { socketId: socket.id }) })
-        }
+        callback({isUserInDB: true, user: Object.assign({}, { _id: result._id, name: result.name }, { socketId: socket.id }), error: "User is already registered!" })
+        
       } else {
-        console.log('Cannot find user')
+        const user = new User({
+          _id: mongoose.Types.ObjectId(),
+          name: nickname,
+      
+        })
+        user.save((err, result)=>{
+          if(err) throw err;
+          console.log('User registered successfully!')
+        })
+        callback({isUserInDB: false, user: Object.assign({}, { _id: user._id, name: user.name }, { socketId: socket.id }), error: "Registered successfully!" })
+
       }
 
     })
 
   })
 
+  socket.on(LOG_IN, (nickname, callback)=>{
+    User.findOne({ name: nickname }, (err, result) => {
+      if (err) throw err
+      if (result) {
+        if (isUserOnline(connectedUsers, result.name)) {
+          callback({ isUserOnline: true, user: null, error: "User is already online!" })
+        } else {
+          callback({ isUserOnline: false, user: Object.assign({}, { _id: result._id, name: result.name }, { socketId: socket.id }), error: "Logged in successfully!" })
+        }
+      } else {
+        callback({isUserOnline: true, user: null, error: "User is not registered!"})
+        console.log('Cannot find user')
+      }
+
+    })
+  })
+
   // handle when user is connected
   socket.on(USER_CONNECTED, (user) => {
-    user.socketId = socket.id
     connectedUsers = addUser(connectedUsers, user)
     socket.user = user
 
@@ -240,7 +264,7 @@ function removeUser(userList, username) {
 }
 
 // function to check username whether it's in the list 
-function isUser(userList, username) {
+function isUserOnline(userList, username) {
   return username in userList
 }
 

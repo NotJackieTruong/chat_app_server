@@ -81,32 +81,65 @@ module.exports = function (socket) {
 
     io.emit(USER_CONNECTED, connectedUsers)
     console.log('Connected user list: ', connectedUsers)
-    Chat.find({}).populate({path: 'messages', populate: [{path: 'sender'}]}).exec((err, results) => {
+  
+    // new method to push to db
+    Chat.find({}).exec((err, chats) => {
       if (err) throw err
-      if (results) {
-        results.map(result => {
-          result.users.map(userId => {
-            for (let key in connectedUsers) {
-              if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
-                return connectedUsers[key]
-              }
+      if (chats) {
+        chats.map(chat => {
+          Message.find({ chatId: chat._id }).populate('sender').exec((err, results)=>{
+            if (err) throw err
+            if (results) {
+              const newChat = Object.assign({}, chat._doc, { messages: results.map(result => result), typingUsers: [], hasNewMessages: false })
+              newChat.users.map(userId => {
+                for (let key in connectedUsers) {
+                  if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
+                    return connectedUsers[key]
+                  }
 
-            }
-          }).map(user => {
-            if (user) {
-              // socket.to(user.socketId).emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
-              if (user._id === socket.user._id) {
-                result._doc.messages
-                socket.emit(PRIVATE_CHAT, Object.assign({}, result._doc, {typingUsers: [], hasNewMessages: false }))
-              }
-            }
+                }
+              }).map(user => {
+                if (user) {
+                  if (user._id === socket.user._id) {
+                    socket.emit(PRIVATE_CHAT, newChat)
+                  }
+                }
 
+              })
+            }
           })
 
         })
-        
       }
     })
+
+    // old method to push to db
+    // Chat.find({}).populate({path: 'messages', populate: [{path: 'sender'}]}).exec((err, results) => {
+    //   if (err) throw err
+    //   if (results) {
+    //     results.map(result => {
+    //       result.users.map(userId => {
+    //         for (let key in connectedUsers) {
+    //           if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
+    //             return connectedUsers[key]
+    //           }
+
+    //         }
+    //       }).map(user => {
+    //         if (user) {
+    //           // socket.to(user.socketId).emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
+    //           if (user._id === socket.user._id) {
+    //             result._doc.messages
+    //             socket.emit(PRIVATE_CHAT, Object.assign({}, result._doc, {typingUsers: [], hasNewMessages: false }))
+    //           }
+    //         }
+
+    //       })
+
+    //     })
+
+    //   }
+    // })
 
   })
 
@@ -160,7 +193,6 @@ module.exports = function (socket) {
           const chat = new Chat({
             _id: mongoose.Types.ObjectId(newChat._id),
             name: newChat.name,
-            messages: newChat.messages,
             isCommunity: newChat.isCommunity
           })
           groupOfUsers.map(user => {
@@ -185,7 +217,6 @@ module.exports = function (socket) {
         const chat = new Chat({
           _id: mongoose.Types.ObjectId(newChat._id),
           name: newChat.name,
-          messages: newChat.messages,
           isCommunity: newChat.isCommunity
         })
         groupOfUsers.map(user => {
@@ -268,7 +299,8 @@ function sendMessageToChat(sender) {
       _id: newMessage._id,
       time: newMessage.time,
       message: newMessage.message,
-      sender: sender._id
+      sender: sender._id,
+      chatId: chatId
     })
     messageDB.save()
 

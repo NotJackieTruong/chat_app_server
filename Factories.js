@@ -13,7 +13,7 @@ const createUser = ({name= "", socketId=null} = {})=>(
 // create message
 const createMessage = ({message="", sender=null} = {})=>({
   _id: mongoose.Types.ObjectId(),
-  time: getTime(new Date(Date.now())),
+  time: new Date(Date.now()),
   message,
   sender
 })
@@ -42,5 +42,6 @@ module.exports ={
   createMessage,
   createChat,
   createUser,
+  getTime
   // createChatNameFromUser
 }

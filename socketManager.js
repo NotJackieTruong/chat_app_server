@@ -34,19 +34,19 @@ module.exports = function (socket) {
     User.findOne({ name: nickname }, (err, result) => {
       if (err) throw err
       if (result) {
-        callback({isUserInDB: true, user: Object.assign({}, { _id: result._id, name: result.name }, { socketId: socket.id }), error: "User is already registered!" })
-        
+        callback({ isUserInDB: true, user: Object.assign({}, { _id: result._id, name: result.name }, { socketId: socket.id }), error: "User is already registered!" })
+
       } else {
         const user = new User({
           _id: mongoose.Types.ObjectId(),
           name: nickname,
-      
+
         })
-        user.save((err, result)=>{
-          if(err) throw err;
+        user.save((err, result) => {
+          if (err) throw err;
           console.log('User registered successfully!')
         })
-        callback({isUserInDB: false, user: Object.assign({}, { _id: user._id, name: user.name }, { socketId: socket.id }), error: "Registered successfully!" })
+        callback({ isUserInDB: false, user: Object.assign({}, { _id: user._id, name: user.name }, { socketId: socket.id }), error: "Registered successfully!" })
 
       }
 
@@ -54,7 +54,7 @@ module.exports = function (socket) {
 
   })
 
-  socket.on(LOG_IN, (nickname, callback)=>{
+  socket.on(LOG_IN, (nickname, callback) => {
     User.findOne({ name: nickname }, (err, result) => {
       if (err) throw err
       if (result) {
@@ -64,7 +64,7 @@ module.exports = function (socket) {
           callback({ isUserOnline: false, user: Object.assign({}, { _id: result._id, name: result.name }, { socketId: socket.id }), error: "Logged in successfully!" })
         }
       } else {
-        callback({isUserOnline: true, user: null, error: "User is not registered!"})
+        callback({ isUserOnline: true, user: null, error: "User is not registered!" })
         console.log('Cannot find user')
       }
 
@@ -81,20 +81,10 @@ module.exports = function (socket) {
 
     io.emit(USER_CONNECTED, connectedUsers)
     console.log('Connected user list: ', connectedUsers)
-
-    Chat.find({}, (err, results) => {
-      if (err) throw err;
-
+    Chat.find({}).populate({path: 'messages', populate: [{path: 'sender'}]}).exec((err, results) => {
+      if (err) throw err
       if (results) {
         results.map(result => {
-          // result.users.filter(user => user in connectedUsers) // take all users that are in activeChat.users array out of connectedUsers object
-          //   .map(user => connectedUsers[user]) // get user object in connectedUsers
-          //   .map(user => {
-          //     socket.to(user.socketId).emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
-          //     // callback(Object.assign({}, result, {typingUsers: [], isCommunity: false}))
-
-          //   })
-          // socket.emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
           result.users.map(userId => {
             for (let key in connectedUsers) {
               if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
@@ -106,15 +96,16 @@ module.exports = function (socket) {
             if (user) {
               // socket.to(user.socketId).emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
               if (user._id === socket.user._id) {
-                socket.emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [], hasNewMessages: false }))
+                result._doc.messages
+                socket.emit(PRIVATE_CHAT, Object.assign({}, result._doc, {typingUsers: [], hasNewMessages: false }))
               }
             }
 
           })
 
         })
+        
       }
-
     })
 
   })
@@ -219,14 +210,14 @@ module.exports = function (socket) {
     const groupOfUserIds = activeChat.users.concat(receivers.map(receiver => receiver._id))
     const groupOfUserNames = activeChat.name.concat(receivers.map(receiver => ", " + receiver.name))
 
-    activeChat.users.map(userId=> {
-      for(let key in connectedUsers){
-        if(JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)){
+    activeChat.users.map(userId => {
+      for (let key in connectedUsers) {
+        if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
           return connectedUsers[key]
         }
       }
     }).map(user => {
-      if(user){
+      if (user) {
         // send new users to all users who are in user.socketId channel
         socket.to(user.socketId).emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
       }
@@ -236,13 +227,13 @@ module.exports = function (socket) {
     socket.emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
 
     // send an active chat to new users
-    receivers.map(receiver =>{
+    receivers.map(receiver => {
       socket.to(receiver.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { name: groupOfUserNames, users: groupOfUserIds }))
     })
 
     // save to db
-    Chat.findOneAndUpdate({_id: mongoose.Types.ObjectId(activeChat._id)}, {users: groupOfUserIds, name: groupOfUserNames}, (err, result)=>{
-      if(err) throw err
+    Chat.findOneAndUpdate({ _id: mongoose.Types.ObjectId(activeChat._id) }, { users: groupOfUserIds, name: groupOfUserNames }, (err, result) => {
+      if (err) throw err
       console.log('Update chat successfully!')
     })
   })
@@ -271,8 +262,20 @@ function isUserOnline(userList, username) {
 // function to send a message event
 function sendMessageToChat(sender) {
   return (chatId, message) => {
-    io.emit(`${MESSAGE_RECEIVED}-${chatId}`, createMessage({ message, sender }))
+    const newMessage = createMessage({ message, sender })
+    io.emit(`${MESSAGE_RECEIVED}-${chatId}`, newMessage)
+    const messageDB = new Message({
+      _id: newMessage._id,
+      time: newMessage.time,
+      message: newMessage.message,
+      sender: sender._id
+    })
+    messageDB.save()
 
+    Chat.updateOne({ _id: chatId }, { $addToSet: { messages: messageDB._id } }, (err, result) => {
+      if (err) throw err
+      console.log('Update chat successfully!')
+    })
   }
 
 }

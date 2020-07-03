@@ -13,5 +13,7 @@ module.exports = {
   ADD_USER_TO_CHAT: "ADD_USER_TO_CHAT", // add user to an active chat || create group chat,
   ACTIVE_CHAT: "ACTIVE_CHAT",
   LOG_IN: "LOG_IN",
-  SIGN_UP: "SIGN_UP"
+  SIGN_UP: "SIGN_UP",
+  DELETE_CHAT: "DELETE_CHAT"
+
 }

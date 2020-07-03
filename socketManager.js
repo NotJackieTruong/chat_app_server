@@ -6,7 +6,7 @@ const Message = require('./models/message')
 
 
 // import socket events
-const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP, LOG_IN } = require('./Events') // import namespaces
+const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP, LOG_IN, DELETE_CHAT } = require('./Events') // import namespaces
 const { createMessage, createChat, createUser } = require('./Factories')
 const user = require('./models/user')
 
@@ -269,6 +269,28 @@ module.exports = function (socket) {
     })
   })
 
+  socket.on(DELETE_CHAT, ({chatId})=>{
+    Chat.findOneAndDelete({_id: chatId}, (err, result)=>{
+      if(err) throw err;
+      console.log('Delete Successfully!', result.users)
+      if(result){
+        result.users.map(userId => {
+          for (let key in connectedUsers) {
+            if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
+              console.log(connectedUsers[key])
+              return connectedUsers[key]
+            }
+          }
+        }).map(user=>{
+          if(user){
+            socket.to(user.socketId).emit(DELETE_CHAT, result)
+          }
+        })
+        socket.emit(DELETE_CHAT, result)
+
+      }
+    })
+  })
 }
 
 // function to add user

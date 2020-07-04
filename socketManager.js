@@ -6,7 +6,7 @@ const Message = require('./models/message')
 
 
 // import socket events
-const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP, LOG_IN, DELETE_CHAT } = require('./Events') // import namespaces
+const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP, LOG_IN, DELETE_CHAT, CHANGE_CHAT_NAME } = require('./Events') // import namespaces
 const { createMessage, createChat, createUser } = require('./Factories')
 const user = require('./models/user')
 
@@ -288,6 +288,31 @@ module.exports = function (socket) {
         })
         socket.emit(DELETE_CHAT, result)
 
+      }
+    })
+  })
+
+  socket.on(CHANGE_CHAT_NAME, ({activeChat, newChatName})=>{
+    Chat.findByIdAndUpdate(activeChat._id, {name: newChatName}, (err, result)=>{
+      if(err) throw err
+      console.log('resut: ', result)
+      if(result){
+
+        result.users.map(userId => {
+
+          for (let key in connectedUsers) {
+            if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
+              return connectedUsers[key]
+            }
+          }
+        }).map(user=>{
+          if(user){
+            socket.to(user.socketId).emit(CHANGE_CHAT_NAME, Object.assign({}, result, {name: newChatName}))
+
+          }
+
+        })
+        socket.emit(CHANGE_CHAT_NAME, {chatId: activeChat._id, newChatName: newChatName})
       }
     })
   })

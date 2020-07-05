@@ -16,5 +16,6 @@ module.exports = {
   SIGN_UP: "SIGN_UP",
   DELETE_CHAT: "DELETE_CHAT",
   CHANGE_CHAT_NAME: "CHANGE_CHAT_NAME",
-
+  USERS_IN_CHAT: "USERS_IN_CHAT",
+  
 }

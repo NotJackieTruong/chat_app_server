@@ -6,7 +6,7 @@ const Message = require('./models/message')
 
 
 // import socket events
-const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP, LOG_IN, DELETE_CHAT, CHANGE_CHAT_NAME } = require('./Events') // import namespaces
+const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP, LOG_IN, DELETE_CHAT, CHANGE_CHAT_NAME, USERS_IN_CHAT } = require('./Events') // import namespaces
 const { createMessage, createChat, createUser } = require('./Factories')
 const user = require('./models/user')
 
@@ -240,7 +240,7 @@ module.exports = function (socket) {
     // const receiverSocket = receiver.socketId
     const groupOfUserIds = activeChat.users.concat(receivers.map(receiver => receiver._id))
     const groupOfUserNames = activeChat.name.concat(receivers.map(receiver => ", " + receiver.name))
-
+    console.log(activeChat.users)
     activeChat.users.map(userId => {
       for (let key in connectedUsers) {
         if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
@@ -315,6 +315,13 @@ module.exports = function (socket) {
         socket.emit(CHANGE_CHAT_NAME, {chatId: activeChat._id, newChatName: newChatName})
       }
     })
+  })
+
+  socket.on(USERS_IN_CHAT, ({chat})=>{
+   User.find().where('_id').in(chat.users).exec((err, result)=>{
+     console.log('result: ', result)
+     socket.emit(USERS_IN_CHAT, {usersInChat: result})
+   })
   })
 }
 

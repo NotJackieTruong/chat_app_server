@@ -240,7 +240,6 @@ module.exports = function (socket) {
     // const receiverSocket = receiver.socketId
     const groupOfUserIds = activeChat.users.concat(receivers.map(receiver => receiver._id))
     const groupOfUserNames = activeChat.name.concat(receivers.map(receiver => ", " + receiver.name))
-    console.log(activeChat.users)
     activeChat.users.map(userId => {
       for (let key in connectedUsers) {
         if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
@@ -259,11 +258,11 @@ module.exports = function (socket) {
 
     // send an active chat to new users
     receivers.map(receiver => {
-      socket.to(receiver.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { name: groupOfUserNames, users: groupOfUserIds }))
+      socket.to(receiver.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { users: groupOfUserIds }))
     })
 
     // save to db
-    Chat.findOneAndUpdate({ _id: mongoose.Types.ObjectId(activeChat._id) }, { users: groupOfUserIds, name: groupOfUserNames }, (err, result) => {
+    Chat.findOneAndUpdate({ _id: mongoose.Types.ObjectId(activeChat._id) }, { users: groupOfUserIds }, (err, result) => {
       if (err) throw err
       console.log('Update chat successfully!')
     })
@@ -295,11 +294,8 @@ module.exports = function (socket) {
   socket.on(CHANGE_CHAT_NAME, ({activeChat, newChatName})=>{
     Chat.findByIdAndUpdate(activeChat._id, {name: newChatName}, (err, result)=>{
       if(err) throw err
-      console.log('resut: ', result)
       if(result){
-
         result.users.map(userId => {
-
           for (let key in connectedUsers) {
             if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
               return connectedUsers[key]
@@ -307,10 +303,8 @@ module.exports = function (socket) {
           }
         }).map(user=>{
           if(user){
-            socket.to(user.socketId).emit(CHANGE_CHAT_NAME, Object.assign({}, result, {name: newChatName}))
-
+            socket.to(user.socketId).emit(CHANGE_CHAT_NAME, {chatId: activeChat._id, newChatName: newChatName})
           }
-
         })
         socket.emit(CHANGE_CHAT_NAME, {chatId: activeChat._id, newChatName: newChatName})
       }

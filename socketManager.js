@@ -6,7 +6,7 @@ const Message = require('./models/message')
 
 
 // import socket events
-const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP, LOG_IN, DELETE_CHAT, CHANGE_CHAT_NAME, USERS_IN_CHAT } = require('./Events') // import namespaces
+const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP, LOG_IN, DELETE_CHAT, CHANGE_CHAT_NAME, USERS_IN_CHAT, LEAVE_GROUP } = require('./Events') // import namespaces
 const { createMessage, createChat, createUser } = require('./Factories')
 const user = require('./models/user')
 
@@ -81,13 +81,13 @@ module.exports = function (socket) {
 
     io.emit(USER_CONNECTED, connectedUsers)
     console.log('Connected user list: ', connectedUsers)
-  
+
     // new method to push to db
     Chat.find({}).exec((err, chats) => {
       if (err) throw err
       if (chats) {
         chats.map(chat => {
-          Message.find({ chatId: chat._id }).populate('sender').exec((err, results)=>{
+          Message.find({ chatId: chat._id }).populate('sender').exec((err, results) => {
             if (err) throw err
             if (results) {
               const newChat = Object.assign({}, chat._doc, { messages: results.map(result => result), typingUsers: [], hasNewMessages: false })
@@ -183,12 +183,36 @@ module.exports = function (socket) {
     const groupOfUsers = [...receivers, sender]
     const groupOfUserIds = groupOfUsers.map(user => user._id)
     const groupOfUserNames = groupOfUsers.map(user => user.name).join(', ')
+    if (receivers.length !== 0) {
+      Chat.find({}, (err, results) => {
+        if (err) throw err;
+        if (results) {
+          if (!checkIsCreated(groupOfUserIds, results)) {
+            console.log('chat is not in db')
+            const newChat = createChat({ name: groupOfUserNames, users: groupOfUserIds })
+            const chat = new Chat({
+              _id: mongoose.Types.ObjectId(newChat._id),
+              name: newChat.name,
+              isCommunity: newChat.isCommunity
+            })
+            groupOfUsers.map(user => {
+              chat.users.push(mongoose.Types.ObjectId(user._id))
+              // send chat to all users that is on user.socketId namespaces
+              socket.to(user.socketId).emit(PRIVATE_CHAT, newChat)
+            })
+            // send chat to the sender
+            socket.emit(PRIVATE_CHAT, newChat)
+            socket.emit(ACTIVE_CHAT, newChat)
 
-    Chat.find({}, (err, results) => {
-      if (err) throw err;
-      if (results) {
-        if (!checkIsCreated(groupOfUserIds, results)) {
-          console.log('chat is not in db')
+            // save chat to db
+            chat.save(err => {
+              if (err) throw err;
+              console.log('Saved successfully!')
+            })
+          } else {
+            console.log('chat is already in db')
+          }
+        } else {
           const newChat = createChat({ name: groupOfUserNames, users: groupOfUserIds })
           const chat = new Chat({
             _id: mongoose.Types.ObjectId(newChat._id),
@@ -197,42 +221,20 @@ module.exports = function (socket) {
           })
           groupOfUsers.map(user => {
             chat.users.push(mongoose.Types.ObjectId(user._id))
-            // send chat to all users that is on user.socketId namespaces
             socket.to(user.socketId).emit(PRIVATE_CHAT, newChat)
           })
-          // send chat to the sender
+          console.log('newChat: ', newChat)
           socket.emit(PRIVATE_CHAT, newChat)
-          socket.emit(ACTIVE_CHAT, newChat)
 
-          // save chat to db
           chat.save(err => {
             if (err) throw err;
             console.log('Saved successfully!')
           })
-        } else {
-          console.log('chat is already in db')
         }
-      } else {
-        const newChat = createChat({ name: groupOfUserNames, users: groupOfUserIds })
-        const chat = new Chat({
-          _id: mongoose.Types.ObjectId(newChat._id),
-          name: newChat.name,
-          isCommunity: newChat.isCommunity
-        })
-        groupOfUsers.map(user => {
-          chat.users.push(mongoose.Types.ObjectId(user._id))
-          socket.to(user.socketId).emit(PRIVATE_CHAT, newChat)
-        })
-        console.log('newChat: ', newChat)
-        socket.emit(PRIVATE_CHAT, newChat)
 
-        chat.save(err => {
-          if (err) throw err;
-          console.log('Saved successfully!')
-        })
-      }
+      })
+    }
 
-    })
 
   })
 
@@ -268,11 +270,11 @@ module.exports = function (socket) {
     })
   })
 
-  socket.on(DELETE_CHAT, ({chatId})=>{
-    Chat.findOneAndDelete({_id: chatId}, (err, result)=>{
-      if(err) throw err;
+  socket.on(DELETE_CHAT, ({ chatId }) => {
+    Chat.findOneAndDelete({ _id: chatId }, (err, result) => {
+      if (err) throw err;
       console.log('Delete Successfully!', result.users)
-      if(result){
+      if (result) {
         result.users.map(userId => {
           for (let key in connectedUsers) {
             if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
@@ -280,8 +282,8 @@ module.exports = function (socket) {
               return connectedUsers[key]
             }
           }
-        }).map(user=>{
-          if(user){
+        }).map(user => {
+          if (user) {
             socket.to(user.socketId).emit(DELETE_CHAT, result)
           }
         })
@@ -291,32 +293,64 @@ module.exports = function (socket) {
     })
   })
 
-  socket.on(CHANGE_CHAT_NAME, ({activeChat, newChatName})=>{
-    Chat.findByIdAndUpdate(activeChat._id, {name: newChatName}, (err, result)=>{
-      if(err) throw err
-      if(result){
+  socket.on(CHANGE_CHAT_NAME, ({ activeChat, newChatName }) => {
+    Chat.findByIdAndUpdate(activeChat._id, { name: newChatName }, (err, result) => {
+      if (err) throw err
+      if (result) {
         result.users.map(userId => {
           for (let key in connectedUsers) {
             if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
               return connectedUsers[key]
             }
           }
-        }).map(user=>{
-          if(user){
-            socket.to(user.socketId).emit(CHANGE_CHAT_NAME, {chatId: activeChat._id, newChatName: newChatName})
+        }).map(user => {
+          if (user) {
+            socket.to(user.socketId).emit(CHANGE_CHAT_NAME, { chatId: activeChat._id, newChatName: newChatName })
           }
         })
-        socket.emit(CHANGE_CHAT_NAME, {chatId: activeChat._id, newChatName: newChatName})
+        socket.emit(CHANGE_CHAT_NAME, { chatId: activeChat._id, newChatName: newChatName })
       }
     })
   })
 
-  socket.on(USERS_IN_CHAT, ({chat})=>{
-   User.find().where('_id').in(chat.users).exec((err, result)=>{
-     console.log('result: ', result)
-     socket.emit(USERS_IN_CHAT, {usersInChat: result})
-   })
+  socket.on(USERS_IN_CHAT, ({ chat }) => {
+    User.find().where('_id').in(chat.users).exec((err, result) => {
+      console.log('result: ', result)
+      socket.emit(USERS_IN_CHAT, { usersInChat: result })
+    })
   })
+
+  socket.on(LEAVE_GROUP, ({ sender, chat }) => {
+    var index = chat.users.indexOf(sender._id)
+    let originalChat = chat
+    if (index > -1) {
+      chat.users.splice(index, 1)
+    }
+    const newChat = chat
+    chat.users.map(userId => {
+      for (let key in connectedUsers) {
+        if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
+          return connectedUsers[key]
+        }
+      }
+    }).map(user => {
+      if (user) {
+        if (user._id !== sender._id) {
+          socket.to(user.socketId).emit(LEAVE_GROUP, { chat: newChat, isSender: false })
+
+        } else {
+          socket.to(user.socketId).emit(LEAVE_GROUP, { chat: originalChat, isSender: true})
+
+        }
+      }
+    })
+    socket.emit(LEAVE_GROUP, { chat: originalChat, isSender: true })
+    Chat.findByIdAndUpdate(chat._id, { $pull: { users: sender._id } }, (err, result) => {
+      if (err) throw err;
+      console.log('results after remove users: ', result)
+    })
+  })
+
 }
 
 // function to add user

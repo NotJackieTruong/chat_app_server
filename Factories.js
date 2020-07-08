@@ -11,11 +11,12 @@ const createUser = ({name= "", socketId=null} = {})=>(
 )
 
 // create message
-const createMessage = ({message="", sender=null} = {})=>({
+const createMessage = ({message="", sender=null, isNotification=false} = {})=>({
   _id: mongoose.Types.ObjectId(),
   time: new Date(Date.now()),
   message,
-  sender
+  sender,
+  isNotification
 })
 
 // function to format the date
@@ -24,13 +25,13 @@ const getTime = (date)=>{
 }
 
 // create chat
-const createChat = ({messages=[], name= "Community", users=[], isCommunity = false, hasNewMessages=false}={})=>({
+const createChat = ({messages=[],name="Unknown", users=[], hasNewMessages=false}={})=>({
   _id: mongoose.Types.ObjectId(),
-  messages,
-  name: isCommunity? "Community": name,
+  name,
   users,
+  createdAt: new Date(Date.now()),
+  messages,
   typingUsers: [],
-  isCommunity,
   hasNewMessages
 })
 

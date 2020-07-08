@@ -169,8 +169,8 @@ module.exports = function (socket) {
   })
 
   // receive message event
-  socket.on(MESSAGE_SENT, ({ chatId, message }) => {
-    sendMessageToChatFromUser(chatId, message)
+  socket.on(MESSAGE_SENT, ({ chatId, message, isNotification }) => {
+    sendMessageToChatFromUser(chatId, message, isNotification)
   })
 
   // receive typing event
@@ -193,7 +193,7 @@ module.exports = function (socket) {
             const chat = new Chat({
               _id: mongoose.Types.ObjectId(newChat._id),
               name: newChat.name,
-              isCommunity: newChat.isCommunity
+              createdAt: newChat.createdAt
             })
             groupOfUsers.map(user => {
               chat.users.push(mongoose.Types.ObjectId(user._id))
@@ -217,7 +217,7 @@ module.exports = function (socket) {
           const chat = new Chat({
             _id: mongoose.Types.ObjectId(newChat._id),
             name: newChat.name,
-            isCommunity: newChat.isCommunity
+            createdAt: newChat.createdAt
           })
           groupOfUsers.map(user => {
             chat.users.push(mongoose.Types.ObjectId(user._id))
@@ -374,14 +374,15 @@ function isUserOnline(userList, username) {
 
 // function to send a message event
 function sendMessageToChat(sender) {
-  return (chatId, message) => {
-    const newMessage = createMessage({ message, sender })
+  return (chatId, message, isNotification) => {
+    const newMessage = createMessage({ message, sender, isNotification })
     io.emit(`${MESSAGE_RECEIVED}-${chatId}`, newMessage)
     const messageDB = new Message({
       _id: newMessage._id,
       time: newMessage.time,
       message: newMessage.message,
       sender: sender._id,
+      isNotification: newMessage.isNotification,
       chatId: chatId
     })
     messageDB.save()

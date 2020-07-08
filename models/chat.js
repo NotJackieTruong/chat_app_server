@@ -5,7 +5,7 @@ const chatSchema = new Schema({
   _id: {type: Schema.Types.ObjectId, required: true},
   name: {type: String, required: true,},
   users:[{type: Schema.Types.ObjectId, required: true, ref: 'User'}],
-  isCommunity: {type: Boolean, default: false},
+  createdAt: {type: Date, required: true}
   // messages: [{type: Schema.Types.ObjectId, required: false, ref: 'Message'}],
 
 })

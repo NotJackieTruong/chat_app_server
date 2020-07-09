@@ -204,6 +204,7 @@ module.exports = function (socket) {
             socket.emit(PRIVATE_CHAT, newChat)
             socket.emit(ACTIVE_CHAT, newChat)
             sendMessageToChatFromUser(newChat._id, `${sender.name} craeted the group.`, true)
+
             // save chat to db
             chat.save(err => {
               if (err) throw err;
@@ -258,16 +259,22 @@ module.exports = function (socket) {
 
     // send new users to the sender on NEW_CHAT_USER namespace
     socket.emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
-
     // send an active chat to new users
     receivers.map(receiver => {
       socket.to(receiver.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { users: groupOfUserIds }))
+
     })
+    receivers.map(receiver=>{
+      sendMessageToChatFromUser(activeChat._id, `${socket.user.name} added ${receiver.name} to chat.`, true)
+
+    })
+  
+
 
     // save to db
     Chat.findOneAndUpdate({ _id: mongoose.Types.ObjectId(activeChat._id) }, { users: groupOfUserIds }, (err, result) => {
       if (err) throw err
-      console.log('Update chat successfully!')
+      console.log('Update chat successfully! from add user to chat event')
     })
   })
 
@@ -291,6 +298,10 @@ module.exports = function (socket) {
         socket.emit(DELETE_CHAT, result)
 
       }
+    })
+    Message.deleteMany({chatId: chatId}, (err, result)=>{
+      if(err) throw err
+      console.log('Delete many messages successfully!')
     })
   })
 
@@ -322,12 +333,8 @@ module.exports = function (socket) {
   })
 
   socket.on(LEAVE_GROUP, ({ sender, chat }) => {
-    var index = chat.users.indexOf(sender._id)
-    let originalChat = chat
-    if (index > -1) {
-      chat.users.splice(index, 1)
-    }
-    const newChat = chat
+    const newChatUsers = chat.users.filter(userId=> userId !== sender._id)
+
     chat.users.map(userId => {
       for (let key in connectedUsers) {
         if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
@@ -337,18 +344,16 @@ module.exports = function (socket) {
     }).map(user => {
       if (user) {
         if (user._id !== sender._id) {
-          socket.to(user.socketId).emit(LEAVE_GROUP, { chat: newChat, isSender: false })
+          socket.to(user.socketId).emit(LEAVE_GROUP, { chat: Object.assign({}, chat, {users: newChatUsers}), isSender: false })
 
-        } else {
-          socket.to(user.socketId).emit(LEAVE_GROUP, { chat: originalChat, isSender: true})
-
-        }
+        } 
       }
     })
-    socket.emit(LEAVE_GROUP, { chat: originalChat, isSender: true })
+    socket.emit(LEAVE_GROUP, { chat: chat, isSender: true })
+    sendMessageToChatFromUser(chat._id, `${socket.user.name} left the group.`, true)
+
     Chat.findByIdAndUpdate(chat._id, { $pull: { users: sender._id } }, (err, result) => {
       if (err) throw err;
-      console.log('results after remove users: ', result)
     })
   })
 

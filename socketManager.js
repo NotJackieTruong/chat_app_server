@@ -203,7 +203,7 @@ module.exports = function (socket) {
             // send chat to the sender
             socket.emit(PRIVATE_CHAT, newChat)
             socket.emit(ACTIVE_CHAT, newChat)
-
+            sendMessageToChatFromUser(newChat._id, `${sender.name} craeted the group.`, true)
             // save chat to db
             chat.save(err => {
               if (err) throw err;
@@ -225,6 +225,7 @@ module.exports = function (socket) {
           })
           console.log('newChat: ', newChat)
           socket.emit(PRIVATE_CHAT, newChat)
+          sendMessageToChatFromUser(newChat._id, `${sender.name} craeted the group.`, true)
 
           chat.save(err => {
             if (err) throw err;

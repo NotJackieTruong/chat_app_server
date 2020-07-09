@@ -49,6 +49,7 @@ io.on('connection', socketManager)
 
 app.use('/', router)
 
-server.listen(PORT, ()=>{
+var listener = server.listen(PORT, ()=>{
   console.log("Connected to port: ", PORT)
+  console.log("Nodejs is running on url: ", listener.address())
 })

@@ -54,6 +54,23 @@ module.exports = function (socket) {
 
   })
 
+  socket.on(VERIFY_USER, (nickname, callback) => {
+    User.findOne({ name: nickname }, (err, result) => {
+      if (err) throw err
+      if (result) {
+        if (isUserOnline(connectedUsers, result.name)) {
+          callback({ isUserOnline: true, user: null, error: "User is already online!" })
+        } else {
+          callback({ isUserOnline: false, user: Object.assign({}, { _id: result._id, name: result.name }, { socketId: socket.id }), error: "Logged in successfully!" })
+        }
+      } else {
+        callback({ isUserOnline: true, user: null, error: "User is not registered!" })
+        console.log('Cannot find user')
+      }
+
+    })
+  })
+
   socket.on(LOG_IN, (nickname, callback) => {
     User.findOne({ name: nickname }, (err, result) => {
       if (err) throw err
@@ -264,11 +281,11 @@ module.exports = function (socket) {
       socket.to(receiver.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { users: groupOfUserIds }))
 
     })
-    receivers.map(receiver=>{
+    receivers.map(receiver => {
       sendMessageToChatFromUser(activeChat._id, `${socket.user.name} added ${receiver.name} to chat.`, true)
 
     })
-  
+
 
 
     // save to db
@@ -299,8 +316,8 @@ module.exports = function (socket) {
 
       }
     })
-    Message.deleteMany({chatId: chatId}, (err, result)=>{
-      if(err) throw err
+    Message.deleteMany({ chatId: chatId }, (err, result) => {
+      if (err) throw err
       console.log('Delete many messages successfully!')
     })
   })
@@ -333,7 +350,7 @@ module.exports = function (socket) {
   })
 
   socket.on(LEAVE_GROUP, ({ sender, chat }) => {
-    const newChatUsers = chat.users.filter(userId=> userId !== sender._id)
+    const newChatUsers = chat.users.filter(userId => userId !== sender._id)
 
     chat.users.map(userId => {
       for (let key in connectedUsers) {
@@ -344,9 +361,9 @@ module.exports = function (socket) {
     }).map(user => {
       if (user) {
         if (user._id !== sender._id) {
-          socket.to(user.socketId).emit(LEAVE_GROUP, { chat: Object.assign({}, chat, {users: newChatUsers}), isSender: false })
+          socket.to(user.socketId).emit(LEAVE_GROUP, { chat: Object.assign({}, chat, { users: newChatUsers }), isSender: false })
 
-        } 
+        }
       }
     })
     socket.emit(LEAVE_GROUP, { chat: chat, isSender: true })

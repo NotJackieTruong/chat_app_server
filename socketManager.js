@@ -90,9 +90,8 @@ module.exports = function (socket) {
     console.log('Connected: ', connectedUsers)
     sendMessageToChatFromUser = sendMessageToChat(user)
     sendTypingFromUser = sendTypingToChat(user)
-
-    io.emit(USER_CONNECTED, connectedUsers)
-
+    const arrayConnectedUsers = Object.values(connectedUsers)
+    io.emit(USER_DISCONNECTED, arrayConnectedUsers)
     // new method to push to db
     Chat.find({}).exec((err, chats) => {
       if (err) throw err
@@ -162,7 +161,8 @@ module.exports = function (socket) {
     // check if the object 'socket' has property 'user'
     if (socket.hasOwnProperty('user')) {
       connectedUsers = removeUser(connectedUsers, socket.user.name)
-      io.emit(USER_DISCONNECTED, connectedUsers)
+      const arrayConnectedUsers = Object.values(connectedUsers)
+      io.emit(USER_DISCONNECTED, arrayConnectedUsers)
       console.log('Disconnected: ', socket.user)
 
     }
@@ -171,7 +171,8 @@ module.exports = function (socket) {
   // receive user logout event
   socket.on(LOGOUT, () => {
     connectedUsers = removeUser(connectedUsers, socket.user.name)
-    io.emit(USER_DISCONNECTED, {connectedUsers: connectedUsers, userName: socket.user.name})
+    const arrayConnectedUsers = Object.values(connectedUsers)
+    io.emit(USER_DISCONNECTED, arrayConnectedUsers)
     console.log('Disconnected: ',  connectedUsers)
   })
 

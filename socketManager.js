@@ -19,12 +19,9 @@ let communityChat = createChat({ isCommunity: true })
 
 // function to receive message on the server
 module.exports = function (socket) {
-  // check socket id
-  console.log('socket id: ', socket.id)
-
   // function to emit a message to send a message from an user
   let sendMessageToChatFromUser;
-
+  console.log('SocketId: ', socket.id)
   // function to emit a message to check whether user is typing
   let sendTypingFromUser;
 
@@ -65,7 +62,6 @@ module.exports = function (socket) {
         }
       } else {
         callback({ isUserOnline: true, user: null, error: "User is not registered!" })
-        console.log('Cannot find user')
       }
 
     })
@@ -82,7 +78,6 @@ module.exports = function (socket) {
         }
       } else {
         callback({ isUserOnline: true, user: null, error: "User is not registered!" })
-        console.log('Cannot find user')
       }
 
     })
@@ -92,22 +87,23 @@ module.exports = function (socket) {
   socket.on(USER_CONNECTED, (user) => {
     connectedUsers = addUser(connectedUsers, user)
     socket.user = user
-
+    console.log('Connected: ', connectedUsers)
     sendMessageToChatFromUser = sendMessageToChat(user)
     sendTypingFromUser = sendTypingToChat(user)
 
     io.emit(USER_CONNECTED, connectedUsers)
-    console.log('Connected user list: ', connectedUsers)
 
     // new method to push to db
     Chat.find({}).exec((err, chats) => {
       if (err) throw err
+
       if (chats) {
         chats.map(chat => {
           Message.find({ chatId: chat._id }).populate('sender').exec((err, results) => {
             if (err) throw err
             if (results) {
               const newChat = Object.assign({}, chat._doc, { messages: results.map(result => result), typingUsers: [], hasNewMessages: false })
+
               newChat.users.map(userId => {
                 for (let key in connectedUsers) {
                   if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
@@ -119,6 +115,7 @@ module.exports = function (socket) {
                 if (user) {
                   if (user._id === socket.user._id) {
                     socket.emit(PRIVATE_CHAT, newChat)
+
                   }
                 }
 
@@ -164,19 +161,18 @@ module.exports = function (socket) {
   socket.on('disconnect', () => {
     // check if the object 'socket' has property 'user'
     if (socket.hasOwnProperty('user')) {
-      console.log(socket.user.name, 'just disconnected!')
       connectedUsers = removeUser(connectedUsers, socket.user.name)
       io.emit(USER_DISCONNECTED, connectedUsers)
-      console.log('user connected list after disconnecting: ', connectedUsers)
+      console.log('Disconnected: ', socket.user)
+
     }
   })
 
   // receive user logout event
   socket.on(LOGOUT, () => {
-    console.log(socket.user.name, 'just logged out!')
     connectedUsers = removeUser(connectedUsers, socket.user.name)
-    io.emit(USER_DISCONNECTED, connectedUsers)
-    console.log('user connected list after loggin out: ', connectedUsers)
+    io.emit(USER_DISCONNECTED, {connectedUsers: connectedUsers, userName: socket.user.name})
+    console.log('Disconnected: ',  connectedUsers)
   })
 
   // receive community_chat (default chat) event
@@ -373,7 +369,6 @@ module.exports = function (socket) {
       if (err) throw err;
     })
   })
-
 }
 
 // function to add user

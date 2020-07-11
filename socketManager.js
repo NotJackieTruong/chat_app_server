@@ -31,19 +31,21 @@ module.exports = function (socket) {
     User.findOne({ name: nickname }, (err, result) => {
       if (err) throw err
       if (result) {
-        callback({ isUserInDB: true, user: Object.assign({}, { _id: result._id, name: result.name }, { socketId: socket.id }), error: "User is already registered!" })
+        callback({ isUserInDB: true, user: Object.assign({}, { _id: result._id, name: result.name, representPhoto: result.representPhoto }, { socketId: socket.id }), error: "User is already registered!" })
 
       } else {
+        const newUser = createUser({name: nickname, socketId: socket.id})
         const user = new User({
-          _id: mongoose.Types.ObjectId(),
-          name: nickname,
+          _id: newUser._id,
+          name: newUser.name,
+          representPhoto: newUser.representPhoto
 
         })
         user.save((err, result) => {
           if (err) throw err;
           console.log('User registered successfully!')
         })
-        callback({ isUserInDB: false, user: Object.assign({}, { _id: user._id, name: user.name }, { socketId: socket.id }), error: "Registered successfully!" })
+        callback({ isUserInDB: false, user: newUser, error: "Registered successfully!" })
 
       }
 
@@ -74,7 +76,7 @@ module.exports = function (socket) {
         if (isUserOnline(connectedUsers, result.name)) {
           callback({ isUserOnline: true, user: null, error: "User is already online!" })
         } else {
-          callback({ isUserOnline: false, user: Object.assign({}, { _id: result._id, name: result.name }, { socketId: socket.id }), error: "Logged in successfully!" })
+          callback({ isUserOnline: false, user: Object.assign({}, { _id: result._id, name: result.name, representPhoto: result.representPhoto }, { socketId: socket.id }), error: "Logged in successfully!" })
         }
       } else {
         callback({ isUserOnline: true, user: null, error: "User is not registered!" })
@@ -207,7 +209,8 @@ module.exports = function (socket) {
             const chat = new Chat({
               _id: mongoose.Types.ObjectId(newChat._id),
               name: newChat.name,
-              createdAt: newChat.createdAt
+              createdAt: newChat.createdAt,
+              representPhoto: newChat.representPhoto
             })
             groupOfUsers.map(user => {
               chat.users.push(mongoose.Types.ObjectId(user._id))
@@ -232,7 +235,8 @@ module.exports = function (socket) {
           const chat = new Chat({
             _id: mongoose.Types.ObjectId(newChat._id),
             name: newChat.name,
-            createdAt: newChat.createdAt
+            createdAt: newChat.createdAt,
+            representPhoto: newChat.representPhoto
           })
           groupOfUsers.map(user => {
             chat.users.push(mongoose.Types.ObjectId(user._id))

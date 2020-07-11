@@ -6,6 +6,7 @@ const createUser = ({name= "", socketId=null} = {})=>(
   {
     _id: mongoose.Types.ObjectId(),
     name,
+    representPhoto: generateRandomColor(),
     socketId
   }
 )
@@ -24,12 +25,21 @@ const getTime = (date)=>{
   return `${date.getHours()}:${("0"+date.getMinutes()).slice(-2)}`
 }
 
+const generateRandomColor= ()=> {
+  let r = Math.round((Math.random() * 200))+ 50; //red 50 to 200
+  let g = Math.round((Math.random() * 200)) + 50; //green 50 to 200
+  let b = Math.round((Math.random() * 200))+ 50; //blue 50 to 200
+
+  return 'rgb(' + r + ', ' + g + ', ' + b + ')'
+};
+
 // create chat
 const createChat = ({messages=[],name="Unknown", users=[], hasNewMessages=false}={})=>({
   _id: mongoose.Types.ObjectId(),
   name,
   users,
   createdAt: new Date(Date.now()),
+  representPhoto: generateRandomColor(),
   messages,
   typingUsers: [],
   hasNewMessages

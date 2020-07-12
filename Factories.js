@@ -13,13 +13,23 @@ const createUser = ({name= "", socketId=null} = {})=>(
 
 // create message
 const createMessage = ({message="", sender=null, isNotification=false} = {})=>({
+  // for message as a text
   _id: mongoose.Types.ObjectId(),
   time: new Date(Date.now()),
   message,
   sender,
+  // for checking if a message is a notification message
   isNotification
 })
 
+const createFileMessage = ({name= "", type= "", size=0, data=[], slice= 0}={})=>({
+  _id: mongoose.Types.ObjectId(),
+  name,
+  type,
+  size,
+  data,
+  slice
+})
 // function to format the date
 const getTime = (date)=>{
   return `${date.getHours()}:${("0"+date.getMinutes()).slice(-2)}`
@@ -53,6 +63,7 @@ module.exports ={
   createMessage,
   createChat,
   createUser,
-  getTime
+  getTime,
+  createFileMessage
   // createChatNameFromUser
 }

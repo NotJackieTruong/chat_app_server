@@ -7,7 +7,7 @@ const Message = require('./models/message')
 
 // import socket events
 const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP, LOG_IN, DELETE_CHAT, CHANGE_CHAT_NAME, USERS_IN_CHAT, LEAVE_GROUP } = require('./Events') // import namespaces
-const { createMessage, createChat, createUser } = require('./Factories')
+const { createMessage, createChat, createUser, createFileMessage } = require('./Factories')
 const user = require('./models/user')
 
 let connectedUsers = {} // list of connected users
@@ -24,6 +24,7 @@ module.exports = function (socket) {
   console.log('SocketId: ', socket.id)
   // function to emit a message to check whether user is typing
   let sendTypingFromUser;
+  socket.binaryType = 'arraybuffer'
 
   // receive verify event to verify user name
   // check if user is already in db
@@ -34,7 +35,7 @@ module.exports = function (socket) {
         callback({ isUserInDB: true, user: Object.assign({}, { _id: result._id, name: result.name, representPhoto: result.representPhoto }, { socketId: socket.id }), error: "User is already registered!" })
 
       } else {
-        const newUser = createUser({name: nickname, socketId: socket.id})
+        const newUser = createUser({ name: nickname, socketId: socket.id })
         const user = new User({
           _id: newUser._id,
           name: newUser.name,
@@ -175,7 +176,7 @@ module.exports = function (socket) {
     connectedUsers = removeUser(connectedUsers, socket.user.name)
     const arrayConnectedUsers = Object.values(connectedUsers)
     io.emit(USER_DISCONNECTED, arrayConnectedUsers)
-    console.log('Disconnected: ',  connectedUsers)
+    console.log('Disconnected: ', connectedUsers)
   })
 
   // receive community_chat (default chat) event
@@ -186,6 +187,7 @@ module.exports = function (socket) {
 
   // receive message event
   socket.on(MESSAGE_SENT, ({ chatId, message, isNotification }) => {
+
     sendMessageToChatFromUser(chatId, message, isNotification)
   })
 
@@ -397,9 +399,11 @@ function isUserOnline(userList, username) {
 
 // function to send a message event
 function sendMessageToChat(sender) {
+  
   return (chatId, message, isNotification) => {
     const newMessage = createMessage({ message, sender, isNotification })
     io.emit(`${MESSAGE_RECEIVED}-${chatId}`, newMessage)
+
     const messageDB = new Message({
       _id: newMessage._id,
       time: newMessage.time,
@@ -409,9 +413,7 @@ function sendMessageToChat(sender) {
       chatId: chatId
     })
     messageDB.save()
-
   }
-
 }
 
 // function to send a typing event

@@ -12,23 +12,29 @@ const createUser = ({name= "", socketId=null} = {})=>(
 )
 
 // create message
-const createMessage = ({message="", sender=null, isNotification=false} = {})=>({
+const createMessage = ({message="", sender=null, isNotification=false, isImage=false} = {})=>({
   // for message as a text
   _id: mongoose.Types.ObjectId(),
   time: new Date(Date.now()),
   message,
   sender,
   // for checking if a message is a notification message
-  isNotification
+  isNotification,
+  isImage
 })
 
-const createFileMessage = ({name= "", type= "", size=0, data=[], slice= 0}={})=>({
+const createFileMessage = ({name= "", type= "", size=0, data="",sender=null, isNotification=false, isImage=true}={})=>({
   _id: mongoose.Types.ObjectId(),
+  time: new Date(Date.now()),
+  // message
   name,
   type,
   size,
   data,
-  slice
+  
+  sender,
+  isNotification,
+  isImage
 })
 // function to format the date
 const getTime = (date)=>{

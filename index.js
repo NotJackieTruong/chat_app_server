@@ -27,6 +27,7 @@ const express = require('express')
 const app = express()
 const server = require('http').Server(app)
 const io = module.exports.io = require('socket.io')(server)
+const path = require('path')
 
 const mongoose = require('mongoose')
 
@@ -48,8 +49,10 @@ mongoose.connection.on("connected", (err, res)=>{
 io.on('connection', socketManager)
 
 app.use('/', router)
+app.use(express.static(path.join(__dirname, 'public')))
 
 var listener = server.listen(PORT, ()=>{
   console.log("Connected to port: ", PORT)
   console.log("Nodejs is running on url: ", listener.address())
+  console.log("dir name: ", path.join(__dirname, 'public'))
 })

@@ -26,6 +26,7 @@ const createMessage = ({message="", sender=null, isNotification=false, isImage=f
 const createFileMessage = ({name= "", type= "", size=0, data="",sender=null, isNotification=false, isImage=true}={})=>({
   _id: mongoose.Types.ObjectId(),
   time: new Date(Date.now()),
+  message: sender? `${sender.name} sent a photo.`: `Someone sent a photo.`,
   // message
   name,
   type,

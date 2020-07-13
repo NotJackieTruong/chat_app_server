@@ -8,7 +8,6 @@ const async = require('async')
 // import socket events
 const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP, LOG_IN, DELETE_CHAT, CHANGE_CHAT_NAME, USERS_IN_CHAT, LEAVE_GROUP } = require('./Events') // import namespaces
 const { createMessage, createChat, createUser, createFileMessage } = require('./Factories')
-const user = require('./models/user')
 
 let connectedUsers = {} // list of connected users
 let communityChat = createChat({ isCommunity: true })
@@ -112,23 +111,20 @@ module.exports = function (socket) {
             }
           }, (err, results)=>{
             if(err) throw err
-            console.log('message list: ', results.message_list)
-            console.log('image message list: ', results.image_message_list)
+           
             var newChat = {}
             if(results.message_list && results.image_message_list){
               var messageList = results.message_list.map(message=> Object.assign({}, message._doc, {isImage: false}))
-              var imageMessageList = results.image_message_list.map(message => Object.assign({}, message._doc, {isImage: true}))
-
+              var imageMessageList = results.image_message_list.map(message => Object.assign({}, message._doc, {isImage: true, message: `${message.sender.name} sent a photo.`}))
               newChat = Object.assign({}, chat._doc, { messages: messageList.concat(imageMessageList).map(result => result), typingUsers: [], hasNewMessages: false })
-
+            
             } else if(results.message_list && !results.image_message_list){
               var messageList = results.message_list.map(message=> Object.assign({}, message._doc, {isImage: false}))
               newChat = Object.assign({}, chat._doc, { messages: messageList.map(result => result), typingUsers: [], hasNewMessages: false })
-
+            
             } else if(!results.message_list && results.image_message_list){
               var imageMessageList = results.image_message_list.map(message => Object.assign({}, message._doc, {isImage: true}))
               newChat = Object.assign({}, chat._doc, { messages: imageMessageList.map(result => result), typingUsers: [], hasNewMessages: false })
-
             }
             if(newChat){
               newChat.users.map(userId => {
@@ -136,51 +132,20 @@ module.exports = function (socket) {
                   if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
                     return connectedUsers[key]
                   }
-
                 }
               }).map(user => {
                 if (user) {
                   if (user._id === socket.user._id) {
                     socket.emit(PRIVATE_CHAT, newChat)
-
                   }
                 }
 
               })
             }
           })
-
         })
       }
     })
-
-    // old method to push to db
-    // Chat.find({}).populate({path: 'messages', populate: [{path: 'sender'}]}).exec((err, results) => {
-    //   if (err) throw err
-    //   if (results) {
-    //     results.map(result => {
-    //       result.users.map(userId => {
-    //         for (let key in connectedUsers) {
-    //           if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
-    //             return connectedUsers[key]
-    //           }
-
-    //         }
-    //       }).map(user => {
-    //         if (user) {
-    //           // socket.to(user.socketId).emit(PRIVATE_CHAT, Object.assign({}, result._doc, { typingUsers: [] }))
-    //           if (user._id === socket.user._id) {
-    //             result._doc.messages
-    //             socket.emit(PRIVATE_CHAT, Object.assign({}, result._doc, {typingUsers: [], hasNewMessages: false }))
-    //           }
-    //         }
-
-    //       })
-
-    //     })
-
-    //   }
-    // })
 
   })
 
@@ -278,11 +243,8 @@ module.exports = function (socket) {
             console.log('Saved successfully!')
           })
         }
-
       })
     }
-
-
   })
 
   socket.on(ADD_USER_TO_CHAT, ({ receivers, activeChat, chats }) => {
@@ -311,10 +273,7 @@ module.exports = function (socket) {
     })
     receivers.map(receiver => {
       sendMessageToChatFromUser(activeChat._id, `${socket.user.name} added ${receiver.name} to chat.`, true)
-
     })
-
-
 
     // save to db
     Chat.findOneAndUpdate({ _id: mongoose.Types.ObjectId(activeChat._id) }, { users: groupOfUserIds }, (err, result) => {
@@ -445,7 +404,6 @@ function sendMessageToChat(sender) {
       messageDB.save()
 
     } else {
-      console.log('type of message: ', typeof message)
       var base64String = message.data
       // image file extension
       var imageExtension = base64String.match(/[^:]\w+\/[\w-+\d.]+(?=;|,)/)[0]
@@ -498,9 +456,5 @@ function checkIsCreated(groupOfUsers, chats) {
     }
   })
   return isCreated
-
-}
-
-function sendPrivateMessageToChat(sender, receiver) {
 
 }

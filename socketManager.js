@@ -8,6 +8,7 @@ const async = require('async')
 // import socket events
 const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP, LOG_IN, DELETE_CHAT, CHANGE_CHAT_NAME, USERS_IN_CHAT, LEAVE_GROUP } = require('./Events') // import namespaces
 const { createMessage, createChat, createUser, createFileMessage } = require('./Factories')
+const message = require('./models/message')
 
 let connectedUsers = {} // list of connected users
 let communityChat = createChat({ isCommunity: true })
@@ -97,36 +98,27 @@ module.exports = function (socket) {
     const arrayConnectedUsers = Object.values(connectedUsers)
     io.emit(USER_DISCONNECTED, arrayConnectedUsers)
     // new method to push to db
-    Chat.find({}).exec((err, chats) => {
+    Chat.find({}).sort({"createdAt": -1}).exec((err, chats) => {
       if (err) throw err
 
       if (chats) {
         chats.map(chat => {
           async.parallel({
-            message_list: function(callback){
-              Message.find({chatId: chat._id}).populate('sender').exec(callback)
+            message_list: function (callback) {
+              Message.find({ chatId: chat._id }).populate('sender').exec(callback)
             },
-            image_message_list: function(callback){
-              ImageMessage.find({chatId: chat._id}).populate('sender').exec(callback)
+            image_message_list: function (callback) {
+              ImageMessage.find({ chatId: chat._id }).populate('sender').exec(callback)
             }
-          }, (err, results)=>{
-            if(err) throw err
-           
-            var newChat = {}
-            if(results.message_list && results.image_message_list){
-              var messageList = results.message_list.map(message=> Object.assign({}, message._doc, {isImage: false}))
-              var imageMessageList = results.image_message_list.map(message => Object.assign({}, message._doc, {isImage: true, message: `${message.sender.name} sent a photo.`}))
-              newChat = Object.assign({}, chat._doc, { messages: messageList.concat(imageMessageList).map(result => result), typingUsers: [], hasNewMessages: false })
-            
-            } else if(results.message_list && !results.image_message_list){
-              var messageList = results.message_list.map(message=> Object.assign({}, message._doc, {isImage: false}))
-              newChat = Object.assign({}, chat._doc, { messages: messageList.map(result => result), typingUsers: [], hasNewMessages: false })
-            
-            } else if(!results.message_list && results.image_message_list){
-              var imageMessageList = results.image_message_list.map(message => Object.assign({}, message._doc, {isImage: true}))
-              newChat = Object.assign({}, chat._doc, { messages: imageMessageList.map(result => result), typingUsers: [], hasNewMessages: false })
-            }
-            if(newChat){
+          }, (err, results) => {
+            if (err) throw err
+            var messageList = results.message_list.map(mess => Object.assign({}, mess._doc, { isImage: false }))
+            var imageMessageList = results.image_message_list.map(mess => Object.assign({}, mess._doc, { isImage: true }))
+            var messageArray = messageList.concat(imageMessageList).map(result => result).sort((a, b) => (a.time > b.time)? 1: -1)
+
+
+            if (messageArray) {
+              var newChat = Object.assign({}, chat._doc, { messages: messageArray.map(result => result), typingUsers: [], hasNewMessages: false })
               newChat.users.map(userId => {
                 for (let key in connectedUsers) {
                   if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
@@ -251,34 +243,36 @@ module.exports = function (socket) {
     // const receiverSocket = receiver.socketId
     const groupOfUserIds = activeChat.users.concat(receivers.map(receiver => receiver._id))
     const groupOfUserNames = activeChat.name.concat(receivers.map(receiver => ", " + receiver.name))
-    activeChat.users.map(userId => {
-      for (let key in connectedUsers) {
-        if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
-          return connectedUsers[key]
-        }
-      }
-    }).map(user => {
-      if (user) {
-        // send new users to all users who are in user.socketId channel
-        socket.to(user.socketId).emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
-      }
-    })
-
-    // send new users to the sender on NEW_CHAT_USER namespace
-    socket.emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
-    // send an active chat to new users
-    receivers.map(receiver => {
-      socket.to(receiver.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { users: groupOfUserIds }))
-
-    })
-    receivers.map(receiver => {
-      sendMessageToChatFromUser(activeChat._id, `${socket.user.name} added ${receiver.name} to chat.`, true)
-    })
 
     // save to db
     Chat.findOneAndUpdate({ _id: mongoose.Types.ObjectId(activeChat._id) }, { users: groupOfUserIds }, (err, result) => {
       if (err) throw err
       console.log('Update chat successfully! from add user to chat event')
+      if (result) {
+        activeChat.users.map(userId => {
+          for (let key in connectedUsers) {
+            if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
+              return connectedUsers[key]
+            }
+          }
+        }).map(user => {
+          if (user) {
+            // send new users to all users who are in user.socketId channel
+            socket.to(user.socketId).emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
+          }
+        })
+
+        // send new users to the sender on NEW_CHAT_USER namespace
+        socket.emit(NEW_CHAT_USER, { chatId: activeChat._id, newUser: receivers })
+        // send an active chat to new users
+        receivers.map(receiver => {
+          socket.to(receiver.socketId).emit(PRIVATE_CHAT, Object.assign({}, activeChat, { users: groupOfUserIds }))
+
+        })
+        receivers.map(receiver => {
+          sendMessageToChatFromUser(activeChat._id, `${socket.user.name} added ${receiver.name} to chat.`, true)
+        })
+      }
     })
   })
 
@@ -307,7 +301,7 @@ module.exports = function (socket) {
       if (err) throw err
       console.log('Delete many messages successfully!')
     })
-    ImageMessage.deleteMany({chatId: chatId}, (err, result)=>{
+    ImageMessage.deleteMany({ chatId: chatId }, (err, result) => {
       if (err) throw err
       console.log('Delete many image messages sucessfully!')
     })
@@ -343,25 +337,26 @@ module.exports = function (socket) {
   socket.on(LEAVE_GROUP, ({ sender, chat }) => {
     const newChatUsers = chat.users.filter(userId => userId !== sender._id)
 
-    chat.users.map(userId => {
-      for (let key in connectedUsers) {
-        if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
-          return connectedUsers[key]
-        }
-      }
-    }).map(user => {
-      if (user) {
-        if (user._id !== sender._id) {
-          socket.to(user.socketId).emit(LEAVE_GROUP, { chat: Object.assign({}, chat, { users: newChatUsers }), isSender: false })
-
-        }
-      }
-    })
-    socket.emit(LEAVE_GROUP, { chat: chat, isSender: true })
-    sendMessageToChatFromUser(chat._id, `${socket.user.name} left the group.`, true)
-
     Chat.findByIdAndUpdate(chat._id, { $pull: { users: sender._id } }, (err, result) => {
       if (err) throw err;
+      if (result) {
+        chat.users.map(userId => {
+          for (let key in connectedUsers) {
+            if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
+              return connectedUsers[key]
+            }
+          }
+        }).map(user => {
+          if (user) {
+            if (user._id !== sender._id) {
+              socket.to(user.socketId).emit(LEAVE_GROUP, { chat: Object.assign({}, chat, { users: newChatUsers }), isSender: false })
+
+            }
+          }
+        })
+        socket.emit(LEAVE_GROUP, { chat: chat, isSender: true })
+        sendMessageToChatFromUser(chat._id, `${socket.user.name} left the group.`, true)
+      }
     })
   })
 }
@@ -390,7 +385,7 @@ function sendMessageToChat(sender) {
   return (chatId, message, isNotification) => {
     if (typeof (message) === 'string') {
       const newMessage = createMessage({ message, sender, isNotification })
-      io.emit(`${MESSAGE_RECEIVED}-${chatId}`, {message: newMessage})
+
 
       // save to db
       const messageDB = new Message({
@@ -401,7 +396,12 @@ function sendMessageToChat(sender) {
         isNotification: newMessage.isNotification,
         chatId: chatId
       })
-      messageDB.save()
+      messageDB.save((err, result) => {
+        if (err) throw err
+        if (result) {
+          io.emit(`${MESSAGE_RECEIVED}-${chatId}`, { message: newMessage })
+        }
+      })
 
     } else {
       var base64String = message.data
@@ -413,14 +413,14 @@ function sendMessageToChat(sender) {
       var imageData = base64String.split(';base64,').pop()
 
       const newImageMessage = createFileMessage({
-        name: message.name, 
-        type: message.type, 
-        size: message.size, 
+        name: message.name,
+        type: message.type,
+        size: message.size,
         data: imageData,
         sender: sender
       })
-      io.emit(`${MESSAGE_RECEIVED}-${chatId}`, {message: newImageMessage})
-    
+
+
       const imageMessageDB = new ImageMessage({
         _id: newImageMessage._id,
         time: newImageMessage.time,
@@ -432,7 +432,12 @@ function sendMessageToChat(sender) {
         isNotification: newImageMessage.isNotification,
         chatId: chatId
       })
-      imageMessageDB.save()
+      imageMessageDB.save((err, result) => {
+        if (err) throw err
+        if (result) {
+          io.emit(`${MESSAGE_RECEIVED}-${chatId}`, { message: newImageMessage })
+        }
+      })
     }
 
   }

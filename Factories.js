@@ -15,7 +15,7 @@ const createUser = ({name= "", socketId=null} = {})=>(
 const createMessage = ({message="", sender=null, isNotification=false, isImage=false} = {})=>({
   // for message as a text
   _id: mongoose.Types.ObjectId(),
-  time: new Date(Date.now()),
+  time: Date.now(),
   message,
   sender,
   // for checking if a message is a notification message
@@ -25,7 +25,7 @@ const createMessage = ({message="", sender=null, isNotification=false, isImage=f
 
 const createFileMessage = ({name= "", type= "", size=0, data="",sender=null, isNotification=false, isImage=true}={})=>({
   _id: mongoose.Types.ObjectId(),
-  time: new Date(Date.now()),
+  time: Date.now(),
   message: sender? `${sender.name} sent a photo.`: `Someone sent a photo.`,
   // message
   name,
@@ -55,7 +55,7 @@ const createChat = ({messages=[],name="Unknown", users=[], hasNewMessages=false}
   _id: mongoose.Types.ObjectId(),
   name,
   users,
-  createdAt: new Date(Date.now()),
+  createdAt: Date.now(),
   representPhoto: generateRandomColor(),
   messages,
   typingUsers: [],

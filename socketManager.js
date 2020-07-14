@@ -3,11 +3,11 @@ const mongoose = require('mongoose')
 const User = require('./models/user')
 const Chat = require('./models/chat')
 const Message = require('./models/message')
-const ImageMessage = require('./models/imageMessage')
+const Image = require('./models/image')
 const async = require('async')
 // import socket events
 const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP, LOG_IN, DELETE_CHAT, CHANGE_CHAT_NAME, USERS_IN_CHAT, LEAVE_GROUP } = require('./Events') // import namespaces
-const { createMessage, createChat, createUser, createFileMessage } = require('./Factories')
+const { createMessage, createChat, createUser, createImage } = require('./Factories')
 const message = require('./models/message')
 
 let connectedUsers = {} // list of connected users
@@ -97,28 +97,18 @@ module.exports = function (socket) {
     sendTypingFromUser = sendTypingToChat(user)
     const arrayConnectedUsers = Object.values(connectedUsers)
     io.emit(USER_DISCONNECTED, arrayConnectedUsers)
-    // new method to push to db
-    Chat.find({}).sort({"createdAt": -1}).exec((err, chats) => {
+
+    // new method to find document from db and send to client
+    Chat.find({}).sort({ "createdAt": -1 }).exec((err, chats) => {
       if (err) throw err
 
       if (chats) {
         chats.map(chat => {
-          async.parallel({
-            message_list: function (callback) {
-              Message.find({ chatId: chat._id }).populate('sender').exec(callback)
-            },
-            image_message_list: function (callback) {
-              ImageMessage.find({ chatId: chat._id }).populate('sender').exec(callback)
-            }
-          }, (err, results) => {
+          Message.find({ chatId: chat._id }).populate([{ path: 'sender', model: 'User' }, { path: 'image', model: 'Image' }]).exec((err, results) => {
             if (err) throw err
-            var messageList = results.message_list.map(mess => Object.assign({}, mess._doc, { isImage: false }))
-            var imageMessageList = results.image_message_list.map(mess => Object.assign({}, mess._doc, { isImage: true }))
-            var messageArray = messageList.concat(imageMessageList).map(result => result).sort((a, b) => (a.time > b.time)? 1: -1)
-
-
-            if (messageArray) {
-              var newChat = Object.assign({}, chat._doc, { messages: messageArray.map(result => result), typingUsers: [], hasNewMessages: false })
+            console.log(results)
+            if (results) {
+              var newChat = Object.assign({}, chat._doc, { messages: results.map(result => result), typingUsers: [], hasNewMessages: false })
               newChat.users.map(userId => {
                 for (let key in connectedUsers) {
                   if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
@@ -135,6 +125,7 @@ module.exports = function (socket) {
               })
             }
           })
+
         })
       }
     })
@@ -242,7 +233,7 @@ module.exports = function (socket) {
   socket.on(ADD_USER_TO_CHAT, ({ receivers, activeChat, chats }) => {
     // const receiverSocket = receiver.socketId
     const groupOfUserIds = activeChat.users.concat(receivers.map(receiver => receiver._id))
-    const groupOfUserNames = activeChat.name.concat(receivers.map(receiver => ", " + receiver.name))
+    // const groupOfUserNames = activeChat.name.concat(receivers.map(receiver => ", " + receiver.name))
 
     // save to db
     Chat.findOneAndUpdate({ _id: mongoose.Types.ObjectId(activeChat._id) }, { users: groupOfUserIds }, (err, result) => {
@@ -279,7 +270,6 @@ module.exports = function (socket) {
   socket.on(DELETE_CHAT, ({ chatId }) => {
     Chat.findOneAndDelete({ _id: chatId }, (err, result) => {
       if (err) throw err;
-      console.log('Delete Successfully!', result.users)
       if (result) {
         result.users.map(userId => {
           for (let key in connectedUsers) {
@@ -294,17 +284,30 @@ module.exports = function (socket) {
           }
         })
         socket.emit(DELETE_CHAT, result)
+        console.log('Delete Chat Successfully!')
 
       }
     })
-    Message.deleteMany({ chatId: chatId }, (err, result) => {
+    Message.find({ chatId: chatId }, (err, results) => {
       if (err) throw err
-      console.log('Delete many messages successfully!')
+      if (results) {
+        results.map(result => {
+          Image.deleteOne({ _id: result.image }, (err, result) => {
+            if (err) throw err
+            if (result.ok === 1) {
+              console.log('Delete Image successfully!')
+
+            }
+            Message.deleteOne({ chatId: chatId }, (err, result) => {
+              if (err) throw err
+              console.log('Delete Message successfully!')
+            })
+
+          })
+        })
+      }
     })
-    ImageMessage.deleteMany({ chatId: chatId }, (err, result) => {
-      if (err) throw err
-      console.log('Delete many image messages sucessfully!')
-    })
+   
   })
 
   socket.on(CHANGE_CHAT_NAME, ({ activeChat, newChatName }) => {
@@ -392,6 +395,7 @@ function sendMessageToChat(sender) {
         _id: newMessage._id,
         time: newMessage.time,
         message: newMessage.message,
+        image: null,
         sender: sender._id,
         isNotification: newMessage.isNotification,
         chatId: chatId
@@ -411,33 +415,46 @@ function sendMessageToChat(sender) {
 
       // image data
       var imageData = base64String.split(';base64,').pop()
+      const newMessage = createMessage({ message: `${sender.name} sent a photo.`, sender, isNotification })
 
-      const newImageMessage = createFileMessage({
+      const newImageMessage = createImage({
         name: message.name,
         type: message.type,
         size: message.size,
         data: imageData,
-        sender: sender
       })
 
+      const messageDB = new Message({
+        _id: newMessage._id,
+        time: newMessage.time,
+        message: newMessage.message,
+        image: newImageMessage._id,
+        sender: sender._id,
+        isNotification: newMessage.isNotification,
+        chatId: chatId
+      })
 
-      const imageMessageDB = new ImageMessage({
+      const imageMessageDB = new Image({
         _id: newImageMessage._id,
         time: newImageMessage.time,
         name: newImageMessage.name,
         type: newImageMessage.type,
         size: newImageMessage.size,
         data: newImageMessage.data,
-        sender: sender._id,
-        isNotification: newImageMessage.isNotification,
-        chatId: chatId
       })
-      imageMessageDB.save((err, result) => {
+
+      messageDB.save((err, result) => {
         if (err) throw err
         if (result) {
-          io.emit(`${MESSAGE_RECEIVED}-${chatId}`, { message: newImageMessage })
+          imageMessageDB.save((err, result) => {
+            if (err) throw err
+            if (result) {
+              io.emit(`${MESSAGE_RECEIVED}-${chatId}`, { message: Object.assign({}, newMessage, { image: newImageMessage }) })
+            }
+          })
         }
       })
+
     }
 
   }

@@ -12,30 +12,26 @@ const createUser = ({name= "", socketId=null} = {})=>(
 )
 
 // create message
-const createMessage = ({message="", sender=null, isNotification=false, isImage=false} = {})=>({
+const createMessage = ({message="", sender=null, isNotification=false} = {})=>({
   // for message as a text
   _id: mongoose.Types.ObjectId(),
   time: Date.now(),
   message,
   sender,
-  // for checking if a message is a notification message
-  isNotification,
-  isImage
+  isNotification, // for checking if a message is a notification message
 })
 
-const createFileMessage = ({name= "", type= "", size=0, data="",sender=null, isNotification=false, isImage=true}={})=>({
+const createImage = ({name= "", type= "", size=0, data="",sender=null, isNotification=false, isImage=true}={})=>({
   _id: mongoose.Types.ObjectId(),
   time: Date.now(),
-  message: sender? `${sender.name} sent a photo.`: `Someone sent a photo.`,
-  // message
   name,
   type,
   size,
   data,
   
-  sender,
-  isNotification,
-  isImage
+  // sender,
+  // isNotification,
+  // isImage
 })
 // function to format the date
 const getTime = (date)=>{
@@ -71,6 +67,6 @@ module.exports ={
   createChat,
   createUser,
   getTime,
-  createFileMessage
+  createImage
   // createChatNameFromUser
 }

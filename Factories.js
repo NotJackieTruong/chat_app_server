@@ -21,14 +21,14 @@ const createMessage = ({message="", sender=null, isNotification=false} = {})=>({
   isNotification, // for checking if a message is a notification message
 })
 
-const createImage = ({name= "", type= "", size=0, data="",sender=null, isNotification=false, isImage=true}={})=>({
+const createFile = ({name= "", type= "", size=0, data="", blob=null, sender=null, isNotification=false, isImage=true}={})=>({
   _id: mongoose.Types.ObjectId(),
   time: Date.now(),
   name,
   type,
   size,
   data,
-  
+  blob,
   // sender,
   // isNotification,
   // isImage
@@ -67,6 +67,6 @@ module.exports ={
   createChat,
   createUser,
   getTime,
-  createImage
+  createFile
   // createChatNameFromUser
 }

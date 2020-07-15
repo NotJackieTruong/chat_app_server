@@ -3,11 +3,11 @@ const mongoose = require('mongoose')
 const User = require('./models/user')
 const Chat = require('./models/chat')
 const Message = require('./models/message')
-const Image = require('./models/image')
+const File = require('./models/file')
 const async = require('async')
 // import socket events
 const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP, LOG_IN, DELETE_CHAT, CHANGE_CHAT_NAME, USERS_IN_CHAT, LEAVE_GROUP } = require('./Events') // import namespaces
-const { createMessage, createChat, createUser, createImage } = require('./Factories')
+const { createMessage, createChat, createUser, createFile } = require('./Factories')
 const message = require('./models/message')
 
 let connectedUsers = {} // list of connected users
@@ -104,9 +104,8 @@ module.exports = function (socket) {
 
       if (chats) {
         chats.map(chat => {
-          Message.find({ chatId: chat._id }).populate([{ path: 'sender', model: 'User' }, { path: 'image', model: 'Image' }]).exec((err, results) => {
+          Message.find({ chatId: chat._id }).populate([{ path: 'sender', model: 'User' }, { path: 'file', model: 'File' }]).exec((err, results) => {
             if (err) throw err
-            console.log(results)
             if (results) {
               var newChat = Object.assign({}, chat._doc, { messages: results.map(result => result), typingUsers: [], hasNewMessages: false })
               newChat.users.map(userId => {
@@ -292,7 +291,7 @@ module.exports = function (socket) {
       if (err) throw err
       if (results) {
         results.map(result => {
-          Image.deleteOne({ _id: result.image }, (err, result) => {
+          File.deleteOne({ _id: result.file }, (err, result) => {
             if (err) throw err
             if (result.ok === 1) {
               console.log('Delete Image successfully!')
@@ -307,7 +306,7 @@ module.exports = function (socket) {
         })
       }
     })
-   
+
   })
 
   socket.on(CHANGE_CHAT_NAME, ({ activeChat, newChatName }) => {
@@ -395,7 +394,7 @@ function sendMessageToChat(sender) {
         _id: newMessage._id,
         time: newMessage.time,
         message: newMessage.message,
-        image: null,
+        file: null,
         sender: sender._id,
         isNotification: newMessage.isNotification,
         chatId: chatId
@@ -408,58 +407,96 @@ function sendMessageToChat(sender) {
       })
 
     } else {
-      var base64String = message.data
-      // image file extension
-      var imageExtension = base64String.match(/[^:]\w+\/[\w-+\d.]+(?=;|,)/)[0]
-      imageExtension = imageExtension.split('/')[1]
+      let newMessage = {}
+      let newFile = {}
+      if (message.type.split("/")[0] === "image") {
+        var base64String = message.data
+        // image file extension
+        var imageExtension = base64String.match(/[^:]\w+\/[\w-+\d.]+(?=;|,)/)[0]
+        imageExtension = imageExtension.split('/')[1]
+        // image data
+        var imageData = base64String.split(';base64,').pop()
 
-      // image data
-      var imageData = base64String.split(';base64,').pop()
-      const newMessage = createMessage({ message: `${sender.name} sent a photo.`, sender, isNotification })
+        newMessage = createMessage({ message: `${sender.name} sent a photo.`, sender, isNotification })
 
-      const newImageMessage = createImage({
-        name: message.name,
-        type: message.type,
-        size: message.size,
-        data: imageData,
-      })
+        newFile = createFile({
+          name: message.name,
+          type: message.type,
+          size: message.size,
+          data: imageData,
+          blob: null
+        })
+      } else {
+        const blob =
+        newMessage = createMessage({ message: `${sender.name} sent a file.`, sender, isNotification })
 
+        newFile = createFile({
+          name: message.name,
+          type: message.type,
+          size: message.size,
+          data: message.data,
+          blob: message.blob
+        })
+
+
+
+      }
       const messageDB = new Message({
         _id: newMessage._id,
         time: newMessage.time,
         message: newMessage.message,
-        image: newImageMessage._id,
+        file: newFile._id,
         sender: sender._id,
         isNotification: newMessage.isNotification,
         chatId: chatId
       })
 
-      const imageMessageDB = new Image({
-        _id: newImageMessage._id,
-        time: newImageMessage.time,
-        name: newImageMessage.name,
-        type: newImageMessage.type,
-        size: newImageMessage.size,
-        data: newImageMessage.data,
+      const fileDB = new File({
+        _id: newFile._id,
+        time: newFile.time,
+        name: newFile.name,
+        type: newFile.type,
+        size: newFile.size,
+        data: newFile.data,
+        blob: newFile.blob
       })
 
       messageDB.save((err, result) => {
         if (err) throw err
         if (result) {
-          imageMessageDB.save((err, result) => {
+          fileDB.save((err, result) => {
             if (err) throw err
             if (result) {
-              io.emit(`${MESSAGE_RECEIVED}-${chatId}`, { message: Object.assign({}, newMessage, { image: newImageMessage }) })
+              io.emit(`${MESSAGE_RECEIVED}-${chatId}`, { message: Object.assign({}, newMessage, { file: newFile }) })
             }
           })
         }
       })
-
     }
 
   }
 }
 
+
+const b64toBlob = (b64Data, contentType='', sliceSize=512) => {
+  const byteCharacters = atob(b64Data);
+  const byteArrays = [];
+
+  for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+    const slice = byteCharacters.slice(offset, offset + sliceSize);
+
+    const byteNumbers = new Array(slice.length);
+    for (let i = 0; i < slice.length; i++) {
+      byteNumbers[i] = slice.charCodeAt(i);
+    }
+
+    const byteArray = new Uint8Array(byteNumbers);
+    byteArrays.push(byteArray);
+  }
+
+  const blob = new Blob(byteArrays, {type: contentType});
+  return blob;
+}
 // function to send a typing event
 function sendTypingToChat(sender) {
   return (chatId, isTyping) => {

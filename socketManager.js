@@ -322,10 +322,15 @@ module.exports = function (socket) {
         }).map(user => {
           if (user) {
             socket.to(user.socketId).emit(CHANGE_CHAT_NAME, { chatId: activeChat._id, newChatName: newChatName })
+            
+
           }
         })
         socket.emit(CHANGE_CHAT_NAME, { chatId: activeChat._id, newChatName: newChatName })
+
       }
+      sendMessageToChatFromUser(activeChat._id, `${socket.user.name} changed chat's name to ${newChatName}`, true)
+
     })
   })
 

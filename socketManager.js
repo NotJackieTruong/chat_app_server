@@ -6,7 +6,10 @@ const Message = require('./models/message')
 const File = require('./models/file')
 const async = require('async')
 // import socket events
-const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP, LOG_IN, DELETE_CHAT, CHANGE_CHAT_NAME, USERS_IN_CHAT, LEAVE_GROUP } = require('./Events') // import namespaces
+const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, 
+        MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, 
+        NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP, VIDEO_CALL,
+        LOG_IN, DELETE_CHAT, CHANGE_CHAT_NAME, USERS_IN_CHAT, LEAVE_GROUP,  } = require('./Events') // import namespaces
 const { createMessage, createChat, createUser, createFile } = require('./Factories')
 const message = require('./models/message')
 
@@ -99,9 +102,8 @@ module.exports = function (socket) {
     io.emit(USER_DISCONNECTED, arrayConnectedUsers)
 
     // new method to find document from db and send to client
-    Chat.find({}).sort({ "createdAt": -1 }).exec((err, chats) => {
+    Chat.find({users: socket.user._id}).sort({ "createdAt": -1 }).exec((err, chats) => {
       if (err) throw err
-
       if (chats) {
         chats.map(chat => {
           Message.find({ chatId: chat._id }).populate([{ path: 'sender', model: 'User' }, { path: 'file', model: 'File' }]).exec((err, results) => {
@@ -366,6 +368,20 @@ module.exports = function (socket) {
       }
     })
   })
+
+  socket.on(VIDEO_CALL, ({offer, to})=>{
+    to.map(userId=>{
+      for(let key in connectedUsers){
+        if(JSON.stringify(connectedUsers[key]._id)=== JSON.stringify(userId)){
+          return connectedUsers[key]
+        }
+      }
+    }).map(user=>{
+      if(user){
+        console.log('user: ', user)
+      }
+    })
+  })
 }
 
 // function to add user
@@ -482,26 +498,6 @@ function sendMessageToChat(sender) {
   }
 }
 
-
-const b64toBlob = (b64Data, contentType='', sliceSize=512) => {
-  const byteCharacters = atob(b64Data);
-  const byteArrays = [];
-
-  for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
-    const slice = byteCharacters.slice(offset, offset + sliceSize);
-
-    const byteNumbers = new Array(slice.length);
-    for (let i = 0; i < slice.length; i++) {
-      byteNumbers[i] = slice.charCodeAt(i);
-    }
-
-    const byteArray = new Uint8Array(byteNumbers);
-    byteArrays.push(byteArray);
-  }
-
-  const blob = new Blob(byteArrays, {type: contentType});
-  return blob;
-}
 // function to send a typing event
 function sendTypingToChat(sender) {
   return (chatId, isTyping) => {

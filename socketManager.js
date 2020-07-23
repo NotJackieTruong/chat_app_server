@@ -6,10 +6,11 @@ const Message = require('./models/message')
 const File = require('./models/file')
 const async = require('async')
 // import socket events
-const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED, 
-        MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT, 
-        NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP, VIDEO_CALL,
-        LOG_IN, DELETE_CHAT, CHANGE_CHAT_NAME, USERS_IN_CHAT, LEAVE_GROUP,  } = require('./Events') // import namespaces
+const { VERIFY_USER, USER_CONNECTED, LOGOUT, COMMUNITY_CHAT, MESSAGE_RECEIVED,
+  MESSAGE_SENT, USER_DISCONNECTED, TYPING, PRIVATE_CHAT,
+  NEW_CHAT_USER, ADD_USER_TO_CHAT, ACTIVE_CHAT, SIGN_UP,
+  LOG_IN, DELETE_CHAT, CHANGE_CHAT_NAME, USERS_IN_CHAT, LEAVE_GROUP,
+  CALL_USER, CALL_MADE, MAKE_ANSER, ANSWER_MADE } = require('./Events') // import namespaces
 const { createMessage, createChat, createUser, createFile } = require('./Factories')
 const message = require('./models/message')
 
@@ -102,7 +103,7 @@ module.exports = function (socket) {
     io.emit(USER_DISCONNECTED, arrayConnectedUsers)
 
     // new method to find document from db and send to client
-    Chat.find({users: socket.user._id}).sort({ "createdAt": -1 }).exec((err, chats) => {
+    Chat.find({ users: socket.user._id }).sort({ "createdAt": -1 }).exec((err, chats) => {
       if (err) throw err
       if (chats) {
         chats.map(chat => {
@@ -324,7 +325,7 @@ module.exports = function (socket) {
         }).map(user => {
           if (user) {
             socket.to(user.socketId).emit(CHANGE_CHAT_NAME, { chatId: activeChat._id, newChatName: newChatName })
-            
+
 
           }
         })
@@ -369,19 +370,46 @@ module.exports = function (socket) {
     })
   })
 
-  socket.on(VIDEO_CALL, ({offer, to})=>{
-    to.map(userId=>{
-      for(let key in connectedUsers){
-        if(JSON.stringify(connectedUsers[key]._id)=== JSON.stringify(userId)){
+  socket.on(CALL_USER, ({ offer, to }) => {
+    to.map(userId => {
+      for (let key in connectedUsers) {
+        if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
           return connectedUsers[key]
         }
       }
-    }).map(user=>{
-      if(user){
-        console.log('user: ', user)
+    }).map(user => {
+      if (user) {
+        if (user._id !== socket.user._id) {
+          socket.to(user.socketId).emit(CALL_MADE, {offer: offer, receiver: socket.id})
+          console.log('2')
+        }
+      }
+    })
+    
+  })
+
+  socket.on(MAKE_ANSER, ({answer, to})=>{
+    console.log('4')
+    socket.to(to).emit(ANSWER_MADE, {answer: answer, receiver: socket.id})
+  })
+
+  socket.on("candidate", ({candidate, to, pc})=>{
+    to.map(userId => {
+      for (let key in connectedUsers) {
+        if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
+          return connectedUsers[key]
+        }
+      }
+    }).map(user => {
+      if (user) {
+        if (user._id !== socket.user._id) {
+          socket.to(user.socketId).emit("gotCandidate", {candidate: candidate, pc: pc})
+          console.log('2')
+        }
       }
     })
   })
+
 }
 
 // function to add user
@@ -449,7 +477,7 @@ function sendMessageToChat(sender) {
         })
       } else {
         const blob =
-        newMessage = createMessage({ message: `${sender.name} sent a file.`, sender, isNotification })
+          newMessage = createMessage({ message: `${sender.name} sent a file.`, sender, isNotification })
 
         newFile = createFile({
           name: message.name,

@@ -381,7 +381,6 @@ module.exports = function (socket) {
       if (user) {
         if (user._id !== socket.user._id) {
           socket.to(user.socketId).emit(CALL_MADE, {offer: offer, receiver: socket.id})
-          console.log('2')
         }
       }
     })
@@ -389,7 +388,6 @@ module.exports = function (socket) {
   })
 
   socket.on(MAKE_ANSER, ({answer, to})=>{
-    console.log('4')
     socket.to(to).emit(ANSWER_MADE, {answer: answer, receiver: socket.id})
   })
 
@@ -404,9 +402,27 @@ module.exports = function (socket) {
       if (user) {
         if (user._id !== socket.user._id) {
           socket.to(user.socketId).emit("gotCandidate", {candidate: candidate, pc: pc})
-          console.log('2')
         }
       }
+    })
+  })
+
+  socket.on("endCall", ({users})=>{
+    users.map(userId => {
+      for (let key in connectedUsers) {
+        if (JSON.stringify(connectedUsers[key]._id) === JSON.stringify(userId)) {
+          return connectedUsers[key]
+        }
+      }
+    }).map(user => {
+      if (user) {
+        if (user._id !== socket.user._id) {
+          socket.to(user.socketId).emit("closeVideoCall")
+          
+        }
+        
+      }
+      socket.emit("closeVideoCall")
     })
   })
 
